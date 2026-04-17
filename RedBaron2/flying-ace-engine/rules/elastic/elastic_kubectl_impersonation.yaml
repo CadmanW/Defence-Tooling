@@ -1,0 +1,36 @@
+name: elastic_kubectl_impersonation
+mode: alert
+eval: |
+  (
+    e.process_name == "kubectl" &&
+    (
+      e.process_args.contains("--as=") ||
+      e.process_args.contains("--as-group=") ||
+      (e.process_args.contains("--as") && e.process_args.contains("system:"))
+    )
+  )
+tests:
+  - cleartext: "kubectl get pods --as=admin"
+    process_name: kubectl
+    process_args: "kubectl get pods --as=admin"
+    should_match: true
+  - cleartext: "kubectl get secrets --as=system:serviceaccount:kube-system:default"
+    process_name: kubectl
+    process_args: "kubectl get secrets --as=system:serviceaccount:kube-system:default"
+    should_match: true
+  - cleartext: "kubectl create deployment --as-group=system:masters"
+    process_name: kubectl
+    process_args: "kubectl create deployment --as-group=system:masters"
+    should_match: true
+  - cleartext: "kubectl auth can-i --as system:admin delete pods"
+    process_name: kubectl
+    process_args: "kubectl auth can-i --as system:admin delete pods"
+    should_match: true
+  - cleartext: "kubectl get pods -n kube-system"
+    process_name: kubectl
+    process_args: "kubectl get pods -n kube-system"
+    should_match: false
+  - cleartext: "kubectl apply -f deployment.yaml"
+    process_name: kubectl
+    process_args: "kubectl apply -f deployment.yaml"
+    should_match: false

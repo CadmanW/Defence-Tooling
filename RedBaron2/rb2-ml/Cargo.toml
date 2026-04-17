@@ -1,0 +1,11 @@
+[package]
+name = "rb2-ml"
+version.workspace = true
+edition.workspace = true
+description = "Lightweight behavior scoring for rb2"
+readme = "../README.md"
+keywords = ["scoring", "anomaly", "security"]
+categories = ["algorithms"]
+
+[dependencies]
+xxhash-rust.workspace = true

@@ -1,0 +1,35 @@
+name: elastic_ip_forwarding_enable
+mode: alert
+eval: |
+  (
+    e.process_name == "sysctl" &&
+    (
+      e.process_args.contains("net.ipv4.ip_forward=1") ||
+      e.process_args.contains("net.ipv6.conf.all.forwarding=1")
+    )
+  )
+tests:
+  - cleartext: "sysctl -w net.ipv4.ip_forward=1"
+    process_name: sysctl
+    process_args: "sysctl -w net.ipv4.ip_forward=1"
+    should_match: true
+  - cleartext: "sysctl net.ipv4.ip_forward=1"
+    process_name: sysctl
+    process_args: "sysctl net.ipv4.ip_forward=1"
+    should_match: true
+  - cleartext: "sysctl -w net.ipv6.conf.all.forwarding=1"
+    process_name: sysctl
+    process_args: "sysctl -w net.ipv6.conf.all.forwarding=1"
+    should_match: true
+  - cleartext: "sysctl net.ipv6.conf.all.forwarding=1"
+    process_name: sysctl
+    process_args: "sysctl net.ipv6.conf.all.forwarding=1"
+    should_match: true
+  - cleartext: "sysctl -a"
+    process_name: sysctl
+    process_args: "sysctl -a"
+    should_match: false
+  - cleartext: "sysctl net.ipv4.ip_forward"
+    process_name: sysctl
+    process_args: "sysctl net.ipv4.ip_forward"
+    should_match: false

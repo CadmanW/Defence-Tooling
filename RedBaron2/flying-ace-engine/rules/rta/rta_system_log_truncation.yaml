@@ -1,0 +1,32 @@
+name: rta_system_log_truncation
+mode: alert
+eval: |
+  (
+    e.process_name == "truncate" &&
+    (
+      e.process_args.contains("/var/log/") ||
+      e.process_args.contains("/var/audit/")
+    ) &&
+    re_match(e.process_args, "(-s\\s*0|--size=0)")
+  )
+tests:
+  - cleartext: "truncate auth.log to zero"
+    process_name: truncate
+    process_args: "truncate -s 0 /var/log/auth.log"
+    should_match: true
+  - cleartext: "truncate syslog"
+    process_name: truncate
+    process_args: "truncate -s0 /var/log/syslog"
+    should_match: true
+  - cleartext: "truncate audit log"
+    process_name: truncate
+    process_args: "truncate --size=0 /var/audit/audit.log"
+    should_match: true
+  - cleartext: "truncate secure log"
+    process_name: truncate
+    process_args: "truncate -s 0 /var/log/secure"
+    should_match: true
+  - cleartext: "normal truncate of temp file"
+    process_name: truncate
+    process_args: "truncate -s 100M /tmp/testfile"
+    should_match: false

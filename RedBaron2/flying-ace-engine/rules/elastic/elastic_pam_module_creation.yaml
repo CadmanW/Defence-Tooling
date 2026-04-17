@@ -1,0 +1,48 @@
+name: elastic_pam_module_creation
+mode: alert
+overlap_allowed_with: [compilation_detected]
+eval: |
+  (
+    (
+      e.process_args.contains("/lib/security/") ||
+      e.process_args.contains("/lib64/security/") ||
+      e.process_args.contains("pam_") ||
+      e.process_args.contains("/etc/pam.d/")
+    ) &&
+    (
+      e.process_name == "cp" ||
+      e.process_name == "mv" ||
+      e.process_name == "install" ||
+      e.process_name == "gcc" ||
+      e.process_name == "make"
+    )
+  )
+tests:
+  - cleartext: "copy PAM module to security directory"
+    process_name: cp
+    process_args: "cp pam_backdoor.so /lib/security/"
+    should_match: true
+  - cleartext: "move PAM module"
+    process_name: mv
+    process_args: "mv /tmp/pam_evil.so /lib64/security/"
+    should_match: true
+  - cleartext: "install PAM module"
+    process_name: install
+    process_args: "install -m 755 pam_rootkit.so /lib/security/"
+    should_match: true
+  - cleartext: "compile PAM module"
+    process_name: gcc
+    process_args: "gcc -fPIC -shared -o pam_backdoor.so pam_backdoor.c"
+    should_match: true
+  - cleartext: "modify PAM config"
+    process_name: cp
+    process_args: "cp malicious_config /etc/pam.d/sshd"
+    should_match: true
+  - cleartext: "normal file copy"
+    process_name: cp
+    process_args: "cp file.txt /tmp/"
+    should_match: false
+  - cleartext: "regular compilation"
+    process_name: gcc
+    process_args: "gcc -o hello hello.c"
+    should_match: false

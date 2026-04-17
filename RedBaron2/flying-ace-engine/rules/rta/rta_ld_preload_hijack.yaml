@@ -1,0 +1,33 @@
+name: rta_ld_preload_hijack
+mode: alert
+eval: |
+  (
+    (e.process_name == "cp" || e.process_name == "mv" || e.process_name == "tee" ||
+     e.process_name == "sed" || e.process_name == "cat" || e.process_name == "echo") &&
+    (e.process_args.contains("ld.so.preload") || e.process_args.contains("libprocesshider"))
+  )
+tests:
+  - cleartext: "cp /etc/ld.so.preload backup"
+    process_name: cp
+    process_args: "cp /etc/ld.so.preload /etc/ld.so.preload.bak"
+    should_match: true
+  - cleartext: "echo libprocesshider into ld.so.preload"
+    process_name: echo
+    process_args: "echo /usr/local/lib/libprocesshider.so >> /etc/ld.so.preload"
+    should_match: true
+  - cleartext: "tee to ld.so.preload"
+    process_name: tee
+    process_args: "tee /etc/ld.so.preload"
+    should_match: true
+  - cleartext: "sed editing ld.so.preload"
+    process_name: sed
+    process_args: "sed -i /libprocesshider/d /etc/ld.so.preload"
+    should_match: true
+  - cleartext: "normal cp unrelated to ld.so.preload"
+    process_name: cp
+    process_args: "cp /tmp/file.txt /tmp/file.bak"
+    should_match: false
+  - cleartext: "cat /etc/passwd (not ld.so.preload)"
+    process_name: cat
+    process_args: "cat /etc/passwd"
+    should_match: false

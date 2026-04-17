@@ -1,0 +1,17 @@
+name: sigma_nohup_susp_execution
+mode: alert
+overlap_allowed_with: [sigma_nohup]
+eval: |
+  (
+    e.process_name == "nohup" && e.process_args.contains("/tmp/")
+  )
+
+tests:
+  - cleartext: "nohup execution"
+    process_name: nohup
+    process_args: "nohup /tmp/"
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

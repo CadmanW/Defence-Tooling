@@ -1,0 +1,19 @@
+name: sigma_base64_execution
+mode: alert
+eval: |
+  (
+    (e.process_args.contains("base64 ")) && (((e.process_args.contains("| bash ") || e.process_args.contains("| sh ") || e.process_args.contains("|bash ") || e.process_args.contains("|sh ")) || (e.process_args.ends_with(" |sh") || e.process_args.ends_with("| bash") || e.process_args.ends_with("| sh") || e.process_args.ends_with("|bash"))))
+  )
+tests:
+  - cleartext: "base64 decode piped to bash"
+    process_name: bash
+    process_args: "echo Y3VybCBodHRwOi8vZXZpbC5jb20K | base64 -d | bash"
+    should_match: true
+  - cleartext: "base64 decode piped to sh"
+    process_name: sh
+    process_args: "base64 -d payload.txt | sh"
+    should_match: true
+  - cleartext: "normal base64 decode"
+    process_name: base64
+    process_args: "base64 -d file.txt"
+    should_match: false

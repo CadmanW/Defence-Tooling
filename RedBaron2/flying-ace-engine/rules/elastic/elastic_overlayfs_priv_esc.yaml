@@ -1,0 +1,38 @@
+name: elastic_overlayfs_priv_esc
+mode: alert
+eval: |
+  (
+    (
+      e.process_args.contains("overlay") ||
+      e.process_args.contains("upperdir") ||
+      e.process_args.contains("lowerdir") ||
+      e.process_args.contains("workdir")
+    ) &&
+    (
+      e.process_name == "mount" ||
+      e.process_name == "unshare" ||
+      e.process_name == "newuidmap" ||
+      e.process_name == "newgidmap"
+    )
+  )
+tests:
+  - cleartext: "mount overlayfs with upperdir"
+    process_name: mount
+    process_args: "mount -t overlay overlay -o lowerdir=/,upperdir=/tmp/upper,workdir=/tmp/work /mnt"
+    should_match: true
+  - cleartext: "unshare with overlay mount"
+    process_name: unshare
+    process_args: "unshare -m bash -c mount -t overlay overlay -o upperdir=/tmp/u,lowerdir=/ /mnt"
+    should_match: true
+  - cleartext: "mount overlayfs privilege escalation"
+    process_name: mount
+    process_args: "mount -t overlay none -o lowerdir=/usr/bin,upperdir=/tmp/up,workdir=/tmp/work /usr/bin"
+    should_match: true
+  - cleartext: "normal mount"
+    process_name: mount
+    process_args: "mount /dev/sda1 /mnt"
+    should_match: false
+  - cleartext: "unshare without overlay"
+    process_name: unshare
+    process_args: "unshare -r bash"
+    should_match: false

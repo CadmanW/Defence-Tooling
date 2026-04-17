@@ -1,0 +1,28 @@
+name: rta_sed_shell_execution
+mode: alert
+eval: |
+  (
+    e.process_name == "sed" &&
+    (
+      re_match(e.process_args, "e\\s*/bin/(sh|bash)") ||
+      re_match(e.process_args, "e\\s+sh") ||
+      re_match(e.process_args, "e\\s+bash")
+    )
+  )
+tests:
+  - cleartext: "sed e flag shell execution"
+    process_name: sed
+    process_args: "sed -e '1e /bin/sh' file.txt"
+    should_match: true
+  - cleartext: "sed executing bash"
+    process_name: sed
+    process_args: "sed '1e bash -c id' /etc/passwd"
+    should_match: true
+  - cleartext: "sed shell spawn"
+    process_name: sed
+    process_args: "sed -n '1e sh' input.txt"
+    should_match: true
+  - cleartext: "normal sed substitution"
+    process_name: sed
+    process_args: "sed 's/old/new/g' file.txt"
+    should_match: false

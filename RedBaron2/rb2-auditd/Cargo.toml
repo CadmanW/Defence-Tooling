@@ -1,0 +1,16 @@
+[package]
+name = "rb2-auditd"
+version.workspace = true
+edition.workspace = true
+description = "Linux audit netlink collection library for rb2"
+readme = "../README.md"
+keywords = ["auditd", "linux", "security"]
+categories = ["os::linux-apis", "network-programming"]
+
+[dependencies]
+anyhow.workspace = true
+libc.workspace = true
+log.workspace = true
+lru.workspace = true
+serde = { workspace = true, features = ["derive"] }
+tokio.workspace = true

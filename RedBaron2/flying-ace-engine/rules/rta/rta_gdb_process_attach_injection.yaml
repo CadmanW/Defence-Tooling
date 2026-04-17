@@ -1,0 +1,30 @@
+name: rta_gdb_process_attach_injection
+mode: alert
+eval: |
+  (
+    e.process_name == "gdb" &&
+    re_match(e.process_args, "-p\\s+[0-9]+") &&
+    (
+      re_match(e.process_args, "call\\s+system\\(") ||
+      re_match(e.process_args, "call\\s+execve\\(") ||
+      re_match(e.process_args, "-batch") ||
+      re_match(e.process_args, "-ex")
+    )
+  )
+tests:
+  - cleartext: "gdb attach and call system"
+    process_name: gdb
+    process_args: "gdb -p 1234 -batch -ex 'call system(\"/bin/sh\")'"
+    should_match: true
+  - cleartext: "gdb attach with execve"
+    process_name: gdb
+    process_args: "gdb -p 5678 -batch -ex 'call execve(\"/bin/bash\", 0, 0)'"
+    should_match: true
+  - cleartext: "gdb attach for injection"
+    process_name: gdb
+    process_args: "gdb -p 9999 -ex 'set {int}0x12345678 = 0x90909090' -ex quit"
+    should_match: true
+  - cleartext: "normal gdb debugging"
+    process_name: gdb
+    process_args: "gdb ./myprogram"
+    should_match: false

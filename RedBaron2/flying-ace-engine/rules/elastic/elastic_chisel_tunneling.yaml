@@ -1,0 +1,35 @@
+name: elastic_chisel_tunneling
+mode: alert
+eval: |
+  (
+    e.process_name == "chisel" &&
+    (
+      e.process_args.contains("client") &&
+      (
+        e.process_args.contains("R:") ||
+        e.process_args.contains("socks") ||
+        re_match(e.process_args, "\\d+:\\d+")
+      )
+    )
+  )
+tests:
+  - cleartext: "chisel client example.com:8080 R:8000:localhost:80"
+    process_name: chisel
+    process_args: "chisel client example.com:8080 R:8000:localhost:80"
+    should_match: true
+  - cleartext: "chisel client attacker.com:9000 R:socks"
+    process_name: chisel
+    process_args: "chisel client attacker.com:9000 R:socks"
+    should_match: true
+  - cleartext: "chisel client 10.0.0.1:8080 9000:10.0.0.2:22"
+    process_name: chisel
+    process_args: "chisel client 10.0.0.1:8080 9000:10.0.0.2:22"
+    should_match: true
+  - cleartext: "chisel server --port 8080"
+    process_name: chisel
+    process_args: "chisel server --port 8080"
+    should_match: false
+  - cleartext: "ssh -L 8080:localhost:80"
+    process_name: ssh
+    process_args: "ssh -L 8080:localhost:80"
+    should_match: false

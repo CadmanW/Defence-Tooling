@@ -1,0 +1,6 @@
+[submodule "rb2-ebpf/libbpf"]
+	path = rb2-ebpf/libbpf
+	url = https://github.com/libbpf/libbpf.git
+[submodule "e2e-tests"]
+	path = e2e-tests
+	url = git@github.com:HackUCF/red-baron-2-e2e.git

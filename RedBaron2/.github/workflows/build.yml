@@ -1,0 +1,469 @@
+name: Build Red Baron 2
+
+on:
+    push:
+        branches: ["main"]
+    pull_request:
+        branches: ["**"]
+
+env:
+    AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+    RB2_RELEASE_BUCKET: ${{ vars.RB2_RELEASE_BUCKET || 'rb2-e2e-releases-us-east-1' }}
+    RB2_RELEASE_LATEST_PREFIX: ${{ vars.RB2_RELEASE_LATEST_PREFIX || 'latest' }}
+    AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+
+jobs:
+    # Quality checks that run the Crane-based checks
+    clippy:
+        runs-on:
+            - runs-on=${{ github.run_id }}
+            - runner=2cpu-linux-x64
+            - spot=pco
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+
+            - name: Fetch required build submodules
+              run: git submodule update --init --recursive rb2-ebpf/libbpf
+
+            - uses: nixbuild/nix-quick-install-action@v34
+              with:
+                  nix_conf: |
+                      keep-env-derivations = true
+                      keep-outputs = true
+
+            - name: Restore and save Nix store
+              uses: nix-community/cache-nix-action@v6
+              with:
+                  primary-key: nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/flake.lock', '**/*.nix', '**/Cargo.lock', '**/Cargo.toml') }}
+                  restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-
+                  restore-prefixes-all-matches: nix-${{ runner.os }}-${{ runner.arch }}-
+                  gc-max-store-size-linux: 5G
+                  purge: true
+                  purge-prefixes: nix-${{ runner.os }}-${{ runner.arch }}-
+                  purge-created: 30
+                  purge-last-accessed: 7
+                  purge-primary-key: never
+
+            - name: Run clippy
+              run: |
+                  echo "Running clippy check..."
+                  nix build .#clippy --print-build-logs
+
+    test:
+        runs-on:
+            - runs-on=${{ github.run_id }}
+            - runner=2cpu-linux-x64
+            - spot=pco
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+
+            - name: Fetch required build submodules
+              run: git submodule update --init --recursive rb2-ebpf/libbpf
+
+            - uses: nixbuild/nix-quick-install-action@v34
+              with:
+                  nix_conf: |
+                      keep-env-derivations = true
+                      keep-outputs = true
+
+            - name: Restore and save Nix store
+              uses: nix-community/cache-nix-action@v6
+              with:
+                  primary-key: nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/flake.lock', '**/*.nix', '**/Cargo.lock', '**/Cargo.toml') }}
+                  restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-
+                  restore-prefixes-all-matches: nix-${{ runner.os }}-${{ runner.arch }}-
+                  gc-max-store-size-linux: 5G
+                  purge: true
+                  purge-prefixes: nix-${{ runner.os }}-${{ runner.arch }}-
+                  purge-created: 30
+                  purge-last-accessed: 7
+                  purge-primary-key: never
+
+            - name: Run tests
+              run: |
+                  echo "Running tests..."
+                  nix build .#test --print-build-logs
+
+    fmt:
+        runs-on:
+            - runs-on=${{ github.run_id }}
+            - runner=2cpu-linux-x64
+            - spot=pco
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+
+            - name: Fetch required build submodules
+              run: git submodule update --init --recursive rb2-ebpf/libbpf
+
+            - uses: nixbuild/nix-quick-install-action@v34
+              with:
+                  nix_conf: |
+                      keep-env-derivations = true
+                      keep-outputs = true
+
+            - name: Restore and save Nix store
+              uses: nix-community/cache-nix-action@v6
+              with:
+                  primary-key: nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/flake.lock', '**/*.nix', '**/Cargo.lock', '**/Cargo.toml') }}
+                  restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-
+                  restore-prefixes-all-matches: nix-${{ runner.os }}-${{ runner.arch }}-
+                  gc-max-store-size-linux: 5G
+                  purge: true
+                  purge-prefixes: nix-${{ runner.os }}-
+                  purge-created: 30
+                  purge-last-accessed: 7
+                  purge-primary-key: never
+                  save: false
+
+            - name: Run format check
+              run: |
+                  echo "Running format check..."
+                  nix build .#fmt --print-build-logs
+
+    build-freebsd:
+        runs-on:
+            - runs-on=${{ github.run_id }}
+            - runner=2cpu-linux-x64
+            - spot=pco
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+
+            - name: Fetch submodules
+              env:
+                  E2E_DEPLOY_KEY: ${{ secrets.E2E_DEPLOY_KEY }}
+              run: |
+                  mkdir -p ~/.ssh
+                  echo "$E2E_DEPLOY_KEY" > ~/.ssh/e2e_key
+                  chmod 600 ~/.ssh/e2e_key
+                  ssh-keyscan github.com >> ~/.ssh/known_hosts
+                  GIT_SSH_COMMAND="ssh -i ~/.ssh/e2e_key" git submodule update --init --recursive
+                  rm ~/.ssh/e2e_key
+
+            - uses: nixbuild/nix-quick-install-action@v34
+              with:
+                  nix_conf: |
+                      keep-env-derivations = true
+                      keep-outputs = true
+
+            - name: Restore and save Nix store
+              uses: nix-community/cache-nix-action@v6
+              with:
+                  primary-key: nix-${{ runner.os }}-${{ runner.arch }}-freebsd-${{ hashFiles('**/flake.lock', '**/*.nix', '**/Cargo.lock', '**/Cargo.toml') }}
+                  restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-freebsd-
+                  restore-prefixes-all-matches: nix-${{ runner.os }}-${{ runner.arch }}-freebsd-
+                  gc-max-store-size-linux: 5G
+                  purge: true
+                  purge-prefixes: nix-${{ runner.os }}-${{ runner.arch }}-freebsd-
+                  purge-created: 30
+                  purge-last-accessed: 7
+                  purge-primary-key: never
+
+            - name: Build FreeBSD target
+              run: |
+                  echo "Cross-compiling for FreeBSD..."
+                  nix build .#freebsd --print-build-logs
+
+            - name: Prepare artifact
+              run: |
+                  mkdir -p artifacts
+                  cp result/bin/rb2 artifacts/rb2-x86_64-freebsd
+                  chmod +x artifacts/rb2-x86_64-freebsd
+
+                  echo "Red Baron 2 Binary (x86_64-freebsd)" > artifacts/build-info-x86_64-freebsd.txt
+                  echo "Built on: $(date -u)" >> artifacts/build-info-x86_64-freebsd.txt
+                  echo "Commit: ${{ github.sha }}" >> artifacts/build-info-x86_64-freebsd.txt
+                  echo "Branch: ${{ github.ref_name }}" >> artifacts/build-info-x86_64-freebsd.txt
+                  echo "Repository: ${{ github.repository }}" >> artifacts/build-info-x86_64-freebsd.txt
+                  echo "" >> artifacts/build-info-x86_64-freebsd.txt
+
+                  echo "Binary details:" >> artifacts/build-info-x86_64-freebsd.txt
+                  file artifacts/rb2-x86_64-freebsd >> artifacts/build-info-x86_64-freebsd.txt
+
+                  cd artifacts
+                  sha256sum rb2-x86_64-freebsd > rb2-x86_64-freebsd.sha256
+
+            - name: Sanitize branch name and get SHA
+              id: sanitize
+              run: |
+                  if [ "${{ github.event_name }}" = "pull_request" ]; then
+                    BRANCH="${{ github.head_ref }}"
+                    SHA="${{ github.event.pull_request.head.sha }}"
+                  else
+                    BRANCH="${{ github.ref_name }}"
+                    SHA="${{ github.sha }}"
+                  fi
+                  SANITIZED_REF=$(echo "$BRANCH" | sed 's/[\/\\:]/-/g')
+                  echo "sanitized_ref=${SANITIZED_REF}" >> $GITHUB_OUTPUT
+                  echo "sha=${SHA}" >> $GITHUB_OUTPUT
+
+            - name: Upload binary artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: rb2-${{ steps.sanitize.outputs.sanitized_ref }}-freebsd-${{ steps.sanitize.outputs.sha }}
+                  path: artifacts/
+                  retention-days: 30
+                  if-no-files-found: error
+
+    clippy-freebsd:
+        runs-on:
+            - runs-on=${{ github.run_id }}
+            - runner=2cpu-linux-x64
+            - spot=pco
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+
+            - name: Fetch submodules
+              env:
+                  E2E_DEPLOY_KEY: ${{ secrets.E2E_DEPLOY_KEY }}
+              run: |
+                  mkdir -p ~/.ssh
+                  echo "$E2E_DEPLOY_KEY" > ~/.ssh/e2e_key
+                  chmod 600 ~/.ssh/e2e_key
+                  ssh-keyscan github.com >> ~/.ssh/known_hosts
+                  GIT_SSH_COMMAND="ssh -i ~/.ssh/e2e_key" git submodule update --init --recursive
+                  rm ~/.ssh/e2e_key
+
+            - uses: nixbuild/nix-quick-install-action@v34
+              with:
+                  nix_conf: |
+                      keep-env-derivations = true
+                      keep-outputs = true
+
+            - name: Restore and save Nix store
+              uses: nix-community/cache-nix-action@v6
+              with:
+                  primary-key: nix-${{ runner.os }}-${{ runner.arch }}-freebsd-${{ hashFiles('**/flake.lock', '**/*.nix', '**/Cargo.lock', '**/Cargo.toml') }}
+                  restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-freebsd-
+                  restore-prefixes-all-matches: nix-${{ runner.os }}-${{ runner.arch }}-freebsd-
+                  gc-max-store-size-linux: 5G
+                  purge: true
+                  purge-prefixes: nix-${{ runner.os }}-${{ runner.arch }}-freebsd-
+                  purge-created: 30
+                  purge-last-accessed: 7
+                  purge-primary-key: never
+                  save: false
+
+            - name: Run clippy (FreeBSD)
+              run: |
+                  echo "Running clippy for FreeBSD target..."
+                  nix build .#clippy-freebsd --print-build-logs
+
+    build:
+        runs-on:
+            - runs-on=${{ github.run_id }}
+            - runner=2cpu-linux-x64
+            - spot=pco
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+
+            - name: Fetch required build submodules
+              run: git submodule update --init --recursive rb2-ebpf/libbpf
+
+            - uses: nixbuild/nix-quick-install-action@v34
+              with:
+                  nix_conf: |
+                      keep-env-derivations = true
+                      keep-outputs = true
+
+            - name: Restore and save Nix store
+              uses: nix-community/cache-nix-action@v6
+              with:
+                  primary-key: nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/flake.lock', '**/*.nix', '**/Cargo.lock', '**/Cargo.toml') }}
+                  restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-
+                  restore-prefixes-all-matches: nix-${{ runner.os }}-${{ runner.arch }}-
+                  gc-max-store-size-linux: 5G
+                  purge: true
+                  purge-prefixes: nix-${{ runner.os }}-${{ runner.arch }}-
+                  purge-created: 30
+                  purge-last-accessed: 7
+                  purge-primary-key: never
+
+            - name: Build with Nix
+              run: |
+                  nix build .#red-baron --print-build-logs
+
+            - name: Prepare artifact
+              run: |
+                  mkdir -p artifacts
+
+                  # Name the artifact after the actual runner architecture.
+                  case "$(uname -m)" in
+                    x86_64|amd64)
+                      ARCH="x86_64-linux"
+                      ;;
+                    aarch64|arm64)
+                      ARCH="aarch64-linux"
+                      ;;
+                    *)
+                      echo "Unsupported runner architecture: $(uname -m)"
+                      exit 1
+                      ;;
+                  esac
+
+                  cp result/bin/rb2 artifacts/rb2-$ARCH
+                  chmod +x artifacts/rb2-$ARCH
+
+                  # Create build info
+                  echo "Red Baron 2 Binary ($ARCH)" > artifacts/build-info-$ARCH.txt
+                  echo "Built on: $(date -u)" >> artifacts/build-info-$ARCH.txt
+                  echo "Commit: ${{ github.sha }}" >> artifacts/build-info-$ARCH.txt
+                  echo "Branch: ${{ github.ref_name }}" >> artifacts/build-info-$ARCH.txt
+                  echo "Repository: ${{ github.repository }}" >> artifacts/build-info-$ARCH.txt
+                  echo "" >> artifacts/build-info-$ARCH.txt
+
+                  # Binary information
+                  echo "Binary details:" >> artifacts/build-info-$ARCH.txt
+                  file artifacts/rb2-$ARCH >> artifacts/build-info-$ARCH.txt
+                  echo "" >> artifacts/build-info-$ARCH.txt
+                  echo "Dependencies:" >> artifacts/build-info-$ARCH.txt
+                  ldd artifacts/rb2-$ARCH 2>&1 >> artifacts/build-info-$ARCH.txt || echo "Static binary (no dynamic dependencies)" >> artifacts/build-info-$ARCH.txt
+
+                  # Create checksum
+                  cd artifacts
+                  sha256sum rb2-$ARCH > rb2-$ARCH.sha256
+
+            - name: Sanitize branch name and get SHA
+              id: sanitize
+              run: |
+                  # For PRs, use head_ref (actual branch name) and head SHA instead of merge ref/SHA
+                  # This ensures E2E workflow can find artifacts using workflow_run.head_branch/head_sha
+                  if [ "${{ github.event_name }}" = "pull_request" ]; then
+                    BRANCH="${{ github.head_ref }}"
+                    SHA="${{ github.event.pull_request.head.sha }}"
+                  else
+                    BRANCH="${{ github.ref_name }}"
+                    SHA="${{ github.sha }}"
+                  fi
+                  SANITIZED_REF=$(echo "$BRANCH" | sed 's/[\/\\:]/-/g')
+                  echo "sanitized_ref=${SANITIZED_REF}" >> $GITHUB_OUTPUT
+                  echo "sha=${SHA}" >> $GITHUB_OUTPUT
+
+            - name: Upload binary artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: rb2-${{ steps.sanitize.outputs.sanitized_ref }}-self-hosted-${{ steps.sanitize.outputs.sha }}
+                  path: artifacts/
+                  retention-days: 30
+                  if-no-files-found: error
+
+    release:
+        needs:
+            - build
+            - build-freebsd
+        runs-on:
+            - runs-on=${{ github.run_id }}
+            - runner=2cpu-linux-x64
+            - spot=pco
+        if: github.ref == 'refs/heads/main'
+        permissions:
+            contents: write
+            id-token: write
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+
+            - name: Download build artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  pattern: rb2-${{ github.ref_name }}-*-${{ github.sha }}
+                  path: artifacts/
+                  merge-multiple: true
+
+            - name: Get commit message
+              id: commit
+              run: |
+                  msg=$(git log -1 --pretty=%s)
+                  echo "message=$msg" >> $GITHUB_OUTPUT
+
+            - name: Get next version
+              id: version
+              run: |
+                  latest_tag=$(git fetch --tags && git tag --sort=-v:refname | head -n1 || echo "")
+                  if [ -z "$latest_tag" ]; then
+                    latest_tag="v0.0.0"
+                  fi
+                  base=${latest_tag%.*}
+                  patch=${latest_tag##*.}
+                  next_patch=$((patch + 1))
+                  next_tag="${base}.${next_patch}"
+                  echo "next_tag=$next_tag" >> $GITHUB_OUTPUT
+
+            - name: Create and push tag
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+                  git tag ${{ steps.version.outputs.next_tag }}
+                  git push origin ${{ steps.version.outputs.next_tag }}
+
+            - name: Create Release
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  gh release create ${{ steps.version.outputs.next_tag }} \
+                    --title "Release ${{ steps.version.outputs.next_tag }} – ${{ steps.commit.outputs.message }}" \
+                    --notes "$(cat <<EOF
+                  ### Commit
+                  - Message: ${{ steps.commit.outputs.message }}
+                  - SHA: ${{ github.sha }}
+                  - Branch: ${{ github.ref_name }}
+                  - Repo: ${{ github.repository }}
+                  EOF
+                  )" \
+                    artifacts/*
+
+            - name: Configure AWS credentials via OIDC
+              run: |
+                  if [ -z "${AWS_ROLE_ARN}" ]; then
+                    echo "AWS_ROLE_ARN repo variable is required for release publishing."
+                    exit 1
+                  fi
+
+            - name: Configure AWS credentials via OIDC
+              uses: aws-actions/configure-aws-credentials@v4
+              with:
+                  role-to-assume: ${{ env.AWS_ROLE_ARN }}
+                  aws-region: ${{ env.AWS_REGION }}
+
+            - name: Publish release contract to S3
+              env:
+                  RELEASE_TAG: ${{ steps.version.outputs.next_tag }}
+              run: |
+                  shopt -s nullglob
+                  found_binary=0
+
+                  for binary in artifacts/rb2-*-linux; do
+                    [ -f "$binary" ] || continue
+                    found_binary=1
+
+                    filename="$(basename "$binary")"
+                    arch="${filename#rb2-}"
+                    arch="${arch%-linux}"
+                    checksum="${binary}.sha256"
+                    normalized_checksum="/tmp/${filename}.sha256"
+
+                    aws s3 cp "$binary" "s3://${RB2_RELEASE_BUCKET}/releases/${RELEASE_TAG}/${filename}"
+                    aws s3 cp "$binary" "s3://${RB2_RELEASE_BUCKET}/${RB2_RELEASE_LATEST_PREFIX}/${arch}/rb2"
+
+                    if [ -f "$checksum" ]; then
+                      aws s3 cp "$checksum" "s3://${RB2_RELEASE_BUCKET}/releases/${RELEASE_TAG}/${filename}.sha256"
+                      awk '{print $1 "  rb2"}' "$checksum" > "$normalized_checksum"
+                    else
+                      sha256sum "$binary" | awk '{print $1 "  rb2"}' > "$normalized_checksum"
+                    fi
+
+                    aws s3 cp "$normalized_checksum" "s3://${RB2_RELEASE_BUCKET}/${RB2_RELEASE_LATEST_PREFIX}/${arch}/rb2.sha256"
+                    echo "Published ${filename} to the release contract"
+                  done
+
+                  if [ "$found_binary" -ne 1 ]; then
+                    echo "No release binaries were found under artifacts/"
+                    exit 1
+                  fi

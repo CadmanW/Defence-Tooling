@@ -1,0 +1,39 @@
+name: rta_history_tampering_enhanced
+mode: alert
+eval: |
+  (
+    (
+      (e.process_name == "sh" || e.process_name == "bash") &&
+      (
+        e.process_args.contains("HISTFILE=/dev/null") ||
+        e.process_args.contains("HISTSIZE=0") ||
+        e.process_args.contains("HISTFILESIZE=0") ||
+        e.process_args.contains("unset HISTFILE")
+      )
+    ) ||
+    (
+      e.process_name == "history" &&
+      e.process_args.contains("-c")
+    )
+  )
+tests:
+  - cleartext: "bash HISTFILE to /dev/null"
+    process_name: bash
+    process_args: "bash -c 'HISTFILE=/dev/null /bin/bash -i'"
+    should_match: true
+  - cleartext: "sh HISTSIZE to zero"
+    process_name: sh
+    process_args: "HISTSIZE=0 HISTFILESIZE=0 sh"
+    should_match: true
+  - cleartext: "unset HISTFILE"
+    process_name: bash
+    process_args: "bash -c 'unset HISTFILE; bash'"
+    should_match: true
+  - cleartext: "history -c clear"
+    process_name: history
+    process_args: "history -c"
+    should_match: true
+  - cleartext: "normal bash execution"
+    process_name: bash
+    process_args: "bash script.sh"
+    should_match: false

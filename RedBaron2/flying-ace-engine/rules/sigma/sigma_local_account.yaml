@@ -1,0 +1,23 @@
+name: sigma_local_account
+mode: alert
+overlap_allowed_with: [sigma_cp_passwd_or_shadow_tmp, sigma_local_groups, sigma_susp_process_reading_sudoers, sigma_susp_sensitive_file_access, sigma_webshell_detection, curl_upload_file_regex, rta_wget_post_exfil]
+eval: |
+  (
+    e.process_args.contains("/etc/passwd") || 
+    e.process_args.contains("/etc/shadow") || 
+    e.process_args.contains("/etc/sudoers") || 
+    e.process_args.contains("/etc/group") 
+  )
+tests:
+  - cleartext: "cat passwd (generic - will overlap with specific rules)"
+    process_name: cat
+    process_args: "cat /etc/passwd"
+    should_match: true
+  - cleartext: "ls group file (generic access)"
+    process_name: ls
+    process_args: "ls -la /etc/group"
+    should_match: true
+  - cleartext: "normal cat without sensitive files"
+    process_name: cat
+    process_args: "cat /tmp/file.txt"
+    should_match: false

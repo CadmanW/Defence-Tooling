@@ -1,0 +1,38 @@
+name: rta_base64_decode_to_exec
+mode: alert
+eval: |
+  (
+    (
+      e.process_name == "base64" &&
+      e.process_args.contains("-d") &&
+      e.process_args.contains("|")
+    ) ||
+    (
+      (e.process_name == "sh" || e.process_name == "bash") &&
+      e.process_args.contains("base64") &&
+      e.process_args.contains("base64 -d") &&
+      (
+        e.process_args.contains("| bash") ||
+        e.process_args.contains("| sh") ||
+        e.process_args.contains("| eval") ||
+        e.process_args.contains("| exec")
+      )
+    )
+  )
+tests:
+  - cleartext: "base64 decode piped to bash"
+    process_name: bash
+    process_args: "bash -c 'base64 -d /tmp/payload.txt | bash'"
+    should_match: true
+  - cleartext: "base64 decode piped to sh"
+    process_name: sh
+    process_args: "echo Y3VybCBodHRwOi8vZXZpbC5jb20K | base64 -d | sh"
+    should_match: true
+  - cleartext: "base64 decode to eval"
+    process_name: bash
+    process_args: "bash -c 'base64 -d encoded.txt | eval'"
+    should_match: true
+  - cleartext: "normal base64 decode to file"
+    process_name: base64
+    process_args: "base64 -d input.b64 > output.txt"
+    should_match: false

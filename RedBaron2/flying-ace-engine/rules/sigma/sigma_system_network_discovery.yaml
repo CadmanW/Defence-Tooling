@@ -1,0 +1,17 @@
+name: sigma_system_network_discovery
+mode: alert
+overlap_allowed_with: []
+eval: |
+  (
+    ((e.process_name == "firewall-cmd" || e.process_name == "ufw" || e.process_name == "iptables" || e.process_name == "netstat" || e.process_name == "ss" || e.process_name == "ip" || e.process_name == "ifconfig" || e.process_name == "systemd-resolve" || e.process_name == "route")) || (e.process_args.contains("/etc/resolv.conf"))
+  )
+
+tests:
+  - cleartext: "firewall-cmd execution"
+    process_name: firewall-cmd
+    process_args: "firewall-cmd /etc/resolv.conf"
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

@@ -1,0 +1,20 @@
+name: sigma_susp_recon_indicators
+mode: alert
+overlap_allowed_with: [rta_suid_binary_enumeration, sigma_susp_find_execution]
+eval: |
+  (
+    (e.process_args.contains(" -name .htpasswd") || e.process_args.contains(" -perm -4000 "))
+  )
+tests:
+  - cleartext: "find htpasswd"
+    process_name: find
+    process_args: "find / -name .htpasswd"
+    should_match: true
+  - cleartext: "find SUID files"
+    process_name: find
+    process_args: "find / -perm -4000 -type f"
+    should_match: true
+  - cleartext: "normal ls"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

@@ -1,0 +1,39 @@
+name: rta_lxd_container_escape
+mode: alert
+eval: |
+  (
+    e.process_name == "lxc" &&
+    (
+      (
+        re_match(e.process_args, "lxc\\s+init") &&
+        re_match(e.process_args, "security\\.privileged=true")
+      ) ||
+      (
+        re_match(e.process_args, "lxc\\s+config\\s+device\\s+add") &&
+        re_match(e.process_args, "disk") &&
+        re_match(e.process_args, "source=/\\s") &&
+        re_match(e.process_args, "path=/")
+      )
+    )
+  )
+tests:
+  - cleartext: "lxd privileged container init"
+    process_name: lxc
+    process_args: "lxc init ubuntu:16.04 test-container -c security.privileged=true"
+    should_match: true
+  - cleartext: "lxd config device add host root"
+    process_name: lxc
+    process_args: "lxc config device add mycontainer mydevice disk source=/ path=/mnt/root recursive=true"
+    should_match: true
+  - cleartext: "lxd privileged container with nesting"
+    process_name: lxc
+    process_args: "lxc init images:alpine/3.12 privesc -c security.privileged=true -c security.nesting=true"
+    should_match: true
+  - cleartext: "normal lxc init"
+    process_name: lxc
+    process_args: "lxc init ubuntu:20.04 mycontainer"
+    should_match: false
+  - cleartext: "lxc config device add normal mount"
+    process_name: lxc
+    process_args: "lxc config device add mycontainer shared disk source=/home/user/shared path=/shared"
+    should_match: false

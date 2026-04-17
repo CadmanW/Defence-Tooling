@@ -1,0 +1,33 @@
+name: rta_docker_container_escape
+mode: alert
+eval: |
+  (
+    e.process_name == "docker" &&
+    re_match(e.process_args, "docker\\s+run") &&
+    re_match(e.process_args, "-v\\s+/:/") &&
+    (
+      re_match(e.process_args, "chroot") ||
+      re_match(e.process_args, "--privileged")
+    )
+  )
+tests:
+  - cleartext: "docker container escape with host mount and chroot"
+    process_name: docker
+    process_args: "docker run -v /:/mnt --rm -it alpine chroot /mnt sh"
+    should_match: true
+  - cleartext: "docker privileged container with root mount"
+    process_name: docker
+    process_args: "docker run --privileged -v /:/host ubuntu chroot /host /bin/bash"
+    should_match: true
+  - cleartext: "docker run with host filesystem access"
+    process_name: docker
+    process_args: "docker run -it -v /:/rootfs alpine chroot /rootfs bash"
+    should_match: true
+  - cleartext: "normal docker run"
+    process_name: docker
+    process_args: "docker run -d nginx"
+    should_match: false
+  - cleartext: "docker run with volume mount (not root)"
+    process_name: docker
+    process_args: "docker run -v /var/www:/var/www nginx"
+    should_match: false

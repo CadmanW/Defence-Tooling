@@ -1,0 +1,16 @@
+name: sigma_install_root_certificate
+mode: alert
+eval: |
+  (
+    (e.process_name == "update-ca-certificates" || e.process_name == "update-ca-trust")
+  )
+
+tests:
+  - cleartext: "update-ca-certificates execution"
+    process_name: update-ca-certificates
+    process_args: "update-ca-certificates"
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

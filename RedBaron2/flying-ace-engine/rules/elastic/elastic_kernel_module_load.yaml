@@ -1,0 +1,39 @@
+name: elastic_kernel_module_load
+mode: alert
+overlap_allowed_with: [interact_lkm]
+eval: |
+  (
+    (e.process_name == "insmod" || e.process_name == "modprobe") &&
+    (
+      e.process_args.contains("/tmp/") ||
+      e.process_args.contains("/dev/shm/") ||
+      e.process_args.contains("/var/tmp/") ||
+      e.process_args.contains("rootkit") ||
+      e.process_args.contains(".ko")
+    )
+  )
+tests:
+  - cleartext: "insmod from tmp"
+    process_name: insmod
+    process_args: "insmod /tmp/malicious.ko"
+    should_match: true
+  - cleartext: "modprobe rootkit module"
+    process_name: modprobe
+    process_args: "modprobe /tmp/rootkit.ko"
+    should_match: true
+  - cleartext: "insmod from dev shm"
+    process_name: insmod
+    process_args: "insmod /dev/shm/backdoor.ko"
+    should_match: true
+  - cleartext: "insmod suspicious ko file"
+    process_name: insmod
+    process_args: "insmod /home/user/evil.ko"
+    should_match: true
+  - cleartext: "normal modprobe"
+    process_name: modprobe
+    process_args: "modprobe snd-hda-intel"
+    should_match: false
+  - cleartext: "system module load"
+    process_name: modprobe
+    process_args: "modprobe kvm"
+    should_match: false

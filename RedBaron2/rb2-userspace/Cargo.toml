@@ -1,0 +1,66 @@
+[package]
+name = "rb2-userspace"
+version.workspace = true
+edition.workspace = true
+description = "Userspace runtime for rb2"
+readme = "../README.md"
+keywords = ["edr", "security", "yara", "linux"]
+categories = ["command-line-utilities", "os::linux-apis"]
+
+[features]
+default = []
+tracing = ["fastrace/enable", "flying-ace-engine/tracing"]
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+base64.workspace = true
+bytes.workspace = true
+chrono.workspace = true
+flate2.workspace = true
+fluke-hpack.workspace = true
+fastrace.workspace = true
+flying-ace-engine.workspace = true
+libc.workspace = true
+log.workspace = true
+log4rs.workspace = true
+lru.workspace = true
+md5.workspace = true
+nix.workspace = true
+reqwest.workspace = true
+rb2-ml.workspace = true
+rusty-s3.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha1.workspace = true
+sha2.workspace = true
+shell-words.workspace = true
+sysinfo.workspace = true
+tar.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+xxhash-rust.workspace = true
+lzma-rs.workspace = true
+yaml-rust2.workspace = true
+yara-x.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+age.workspace = true
+asciicastlib.workspace = true
+aya.workspace = true
+aya-obj.workspace = true
+iptables.workspace = true
+nfq.workspace = true
+rb2-auditd.workspace = true
+sd-notify.workspace = true
+sqlx.workspace = true
+
+[build-dependencies]
+lzma-rs.workspace = true
+
+[[bin]]
+name = "rb2"
+path = "src/main.rs"
+
+[lints.clippy]
+non_ascii_literal = "deny"

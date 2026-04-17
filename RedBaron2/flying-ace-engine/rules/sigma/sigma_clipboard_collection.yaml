@@ -1,0 +1,21 @@
+name: sigma_clipboard_collection
+mode: alert
+eval: |
+  (
+    e.process_executable.contains("xclip") && (e.process_args.contains("-sel") && e.process_args.contains("clip") && e.process_args.contains("-o"))
+  )
+tests:
+  - cleartext: "xclip clipboard"
+    process_name: xclip
+    process_executable: /usr/bin/xclip
+    process_args: "xclip -sel clip -o"
+    should_match: true
+  - cleartext: "xclip without required flags"
+    process_name: xclip
+    process_executable: /usr/bin/xclip
+    process_args: "xclip -i"
+    should_match: false
+  - cleartext: "normal ls"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

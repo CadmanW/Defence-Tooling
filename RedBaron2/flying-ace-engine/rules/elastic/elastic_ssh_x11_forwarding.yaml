@@ -1,0 +1,36 @@
+name: elastic_ssh_x11_forwarding
+mode: alert
+eval: |
+  (
+    e.process_name == "ssh" &&
+    (
+      e.process_args.contains("-X") ||
+      e.process_args.contains("-Y") ||
+      e.process_args.contains("ForwardX11")
+    )
+  )
+tests:
+  - cleartext: "ssh -X user@remote.host"
+    process_name: ssh
+    process_args: "ssh -X user@remote.host"
+    should_match: true
+  - cleartext: "ssh -Y user@target.com"
+    process_name: ssh
+    process_args: "ssh -Y user@target.com"
+    should_match: true
+  - cleartext: "ssh -o ForwardX11=yes user@host"
+    process_name: ssh
+    process_args: "ssh -o ForwardX11=yes user@host"
+    should_match: true
+  - cleartext: "ssh -XY user@10.0.0.1"
+    process_name: ssh
+    process_args: "ssh -XY user@10.0.0.1"
+    should_match: true
+  - cleartext: "ssh user@example.com"
+    process_name: ssh
+    process_args: "ssh user@example.com"
+    should_match: false
+  - cleartext: "ssh -L 8080:localhost:80 user@host"
+    process_name: ssh
+    process_args: "ssh -L 8080:localhost:80 user@host"
+    should_match: false

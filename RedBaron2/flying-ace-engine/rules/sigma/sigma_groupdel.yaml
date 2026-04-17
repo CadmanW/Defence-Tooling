@@ -1,0 +1,16 @@
+name: sigma_groupdel
+mode: alert
+eval: |
+  (
+    e.process_name == "groupdel"
+  )
+
+tests:
+  - cleartext: "groupdel execution"
+    process_name: groupdel
+    process_args: "groupdel"
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

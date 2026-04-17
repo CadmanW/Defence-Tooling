@@ -1,0 +1,16 @@
+name: sigma_susp_container_residence_discovery
+mode: alert
+eval: |
+  (
+    (((e.process_name.ends_with("awk") || e.process_name == "cat" || e.process_name.ends_with("grep") || e.process_name == "head" || e.process_name == "less" || e.process_name == "more" || e.process_name == "nl" || e.process_name == "tail")) && ((e.process_args.contains("/proc/2/")) || (e.process_args.contains("/proc/") && (e.process_args.ends_with("/cgroup") || e.process_args.ends_with("/sched")))))
+  )
+
+tests:
+  - cleartext: "cat execution"
+    process_name: cat
+    process_args: "cat /proc/2/"
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

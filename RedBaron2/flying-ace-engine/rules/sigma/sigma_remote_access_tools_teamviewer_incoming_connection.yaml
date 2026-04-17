@@ -1,0 +1,17 @@
+name: sigma_remote_access_tools_teamviewer_incoming_connection
+mode: alert
+eval: |
+  (
+    e.process_pname == "TeamViewer_Service" && e.process_name == "TeamViewer_Desktop" && e.process_args.ends_with("/TeamViewer_Desktop --IPCport 5939 --Module 1")
+  )
+
+tests:
+  - cleartext: "TeamViewer_Desktop spawned - requires exact parent and args"
+    process_name: TeamViewer_Desktop
+    process_pname: TeamViewer_Service
+    process_args: "/opt/teamviewer/TeamViewer_Desktop --IPCport 5939 --Module 1"
+    should_match: true
+  - cleartext: "normal ls"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

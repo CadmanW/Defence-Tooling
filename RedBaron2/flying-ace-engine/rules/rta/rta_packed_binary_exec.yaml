@@ -1,0 +1,21 @@
+name: rta_packed_binary_exec
+mode: alert
+eval: |
+  (
+    (e.process_name == "cp" || e.process_name == "chmod") &&
+    re_match(e.process_args, "(packed_bin|test_upx|upx)") &&
+    re_match(e.process_args, "/tmp/")
+  )
+tests:
+  - cleartext: "cp UPX packed binary to /tmp"
+    process_name: cp
+    process_args: "cp /home/ubuntu/atomic-red-team/atomics/T1027.002/bin/linux/test_upx /tmp/packed_bin"
+    should_match: true
+  - cleartext: "chmod and execute packed binary"
+    process_name: chmod
+    process_args: "chmod +x /tmp/packed_bin && /tmp/packed_bin"
+    should_match: true
+  - cleartext: "normal cp of non-suspicious file"
+    process_name: cp
+    process_args: "cp /tmp/file.txt /tmp/file2.txt"
+    should_match: false

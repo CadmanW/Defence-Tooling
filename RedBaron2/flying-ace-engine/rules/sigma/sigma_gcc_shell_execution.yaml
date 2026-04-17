@@ -1,0 +1,20 @@
+name: sigma_gcc_shell_execution
+mode: alert
+eval: |
+  (
+    ((e.process_name == "c89" || e.process_name == "c99" || e.process_name == "gcc") && e.process_args.contains("-wrapper")) && ((e.process_args.contains("/bin/bash,-s") || e.process_args.contains("/bin/dash,-s") || e.process_args.contains("/bin/fish,-s") || e.process_args.contains("/bin/sh,-s") || e.process_args.contains("/bin/zsh,-s")))
+  )
+
+tests:
+  - cleartext: "gcc with shell wrapper"
+    process_name: gcc
+    process_args: "gcc -wrapper /bin/bash,-s test.c"
+    should_match: true
+  - cleartext: "c99 with sh wrapper"
+    process_name: c99
+    process_args: "c99 -wrapper /bin/sh,-s program.c"
+    should_match: true
+  - cleartext: "normal gcc"
+    process_name: gcc
+    process_args: "gcc -o program program.c"
+    should_match: false

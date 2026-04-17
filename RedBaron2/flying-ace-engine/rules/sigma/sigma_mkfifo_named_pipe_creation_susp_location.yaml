@@ -1,0 +1,17 @@
+name: sigma_mkfifo_named_pipe_creation_susp_location
+mode: alert
+overlap_allowed_with: [sigma_mkfifo_named_pipe_creation]
+eval: |
+  (
+    e.process_name == "mkfifo" && e.process_args.contains(" /tmp/")
+  )
+
+tests:
+  - cleartext: "mkfifo execution"
+    process_name: mkfifo
+    process_args: "mkfifo  /tmp/"
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

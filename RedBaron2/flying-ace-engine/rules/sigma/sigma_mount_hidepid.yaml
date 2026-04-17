@@ -1,0 +1,16 @@
+name: sigma_mount_hidepid
+mode: alert
+eval: |
+  (
+    e.process_name == "mount" && (e.process_args.contains("hidepid=2") && e.process_args.contains(" -o "))
+  )
+
+tests:
+  - cleartext: "mount with hidepid"
+    process_name: mount
+    process_args: "mount -o remount,rw,hidepid=2 /proc"
+    should_match: true
+  - cleartext: "normal mount"
+    process_name: mount
+    process_args: "mount /dev/sdb1 /mnt"
+    should_match: false

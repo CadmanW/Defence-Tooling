@@ -1,0 +1,636 @@
+name: E2E Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      aws_region:
+        description: "AWS Region"
+        required: false
+        default: "us-east-1"
+      vpc_id:
+        description: "VPC ID"
+        required: false
+        default: "vpc-023d9c1226354eb84"
+      instance_type:
+        description: "EC2 Instance Type"
+        required: false
+        default: "t3.medium"
+      test_hosts_json:
+        description: "Optional JSON map of test hosts keyed by logical name"
+        required: false
+        default: ""
+      verify_wait_minutes:
+        description: "Minutes to wait before verification"
+        required: false
+        default: "5"
+      verify_lookback_minutes:
+        description: "Minutes of logs to query during verification"
+        required: false
+        default: "30"
+      rb2_install_source:
+        description: "Install source: s3_latest, build_artifact, s3_object, direct_url, github_release"
+        required: false
+        default: "s3_latest"
+      rb2_s3_bucket:
+        description: "Override S3 bucket when rb2_install_source=s3_object"
+        required: false
+        default: ""
+      rb2_s3_key:
+        description: "Override S3 key when rb2_install_source=s3_object"
+        required: false
+        default: ""
+      rb2_binary_url:
+        description: "Override binary URL when rb2_install_source=direct_url"
+        required: false
+        default: ""
+      rb2_checksum_url:
+        description: "Override checksum URL when rb2_install_source=direct_url"
+        required: false
+        default: ""
+      rb2_stream_prefix:
+        description: "OpenObserve stream prefix"
+        required: false
+        default: "rb2-logs"
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ${{ github.event.inputs.aws_region || vars.AWS_REGION || 'us-east-1' }}
+  VPC_ID: ${{ github.event.inputs.vpc_id || vars.VPC_ID || 'vpc-023d9c1226354eb84' }}
+  TEST_HOSTS_JSON: ${{ github.event.inputs.test_hosts_json || vars.TEST_HOSTS_JSON || '' }}
+  INSTANCE_TYPE: ${{ github.event.inputs.instance_type || vars.INSTANCE_TYPE || 't3.medium' }}
+  VERIFY_WAIT_MINUTES: ${{ github.event.inputs.verify_wait_minutes || vars.VERIFY_WAIT_MINUTES || '5' }}
+  VERIFY_LOOKBACK_MINUTES: ${{ github.event.inputs.verify_lookback_minutes || vars.VERIFY_LOOKBACK_MINUTES || '30' }}
+  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET || 'rb2-e2e-terraform-state' }}
+  TF_STATE_DYNAMODB_TABLE: ${{ vars.TF_STATE_DYNAMODB_TABLE || 'rb2-e2e-terraform-locks' }}
+  RB2_RELEASE_BUCKET: ${{ vars.RB2_RELEASE_BUCKET || 'rb2-e2e-releases-us-east-1' }}
+  RB2_RELEASE_LATEST_PREFIX: ${{ vars.RB2_RELEASE_LATEST_PREFIX || 'latest' }}
+  RB2_STREAM_PREFIX: ${{ github.event.inputs.rb2_stream_prefix || vars.RB2_STREAM_PREFIX || 'rb2-logs' }}
+  ANSIBLE_SSM_BUCKET_NAME: ${{ vars.ANSIBLE_SSM_BUCKET_NAME || 'rb2-e2e-ansible-ssm-us-east-1' }}
+  AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+
+jobs:
+  check-build-status:
+    runs-on: runs-on=${{ github.run_id }}/runner=1cpu-linux-x64
+    outputs:
+      branch: ${{ steps.check.outputs.branch }}
+      artifact_name: ${{ steps.check.outputs.artifact_name }}
+      run_id: ${{ steps.check.outputs.run_id }}
+      sha: ${{ steps.check.outputs.sha }}
+    steps:
+      - name: Resolve branch and build artifact
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_INSTALL_SOURCE: ${{ github.event.inputs.rb2_install_source || 's3_latest' }}
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          echo "branch=${BRANCH}" >> "$GITHUB_OUTPUT"
+
+          if [ "$INPUT_INSTALL_SOURCE" != "build_artifact" ]; then
+            echo "run_id=" >> "$GITHUB_OUTPUT"
+            echo "artifact_name=" >> "$GITHUB_OUTPUT"
+            echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Checking for in-progress builds on branch ${BRANCH}..."
+          MAX_WAIT=600
+          WAIT_INTERVAL=15
+          ELAPSED=0
+
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            IN_PROGRESS="$(gh api repos/${{ github.repository }}/actions/workflows/build.yml/runs \
+              --jq ".workflow_runs[] | select(.head_branch==\"${BRANCH}\" and (.status==\"in_progress\" or .status==\"queued\")) | .id" \
+              | head -1)"
+
+            if [ -z "$IN_PROGRESS" ]; then
+              break
+            fi
+
+            echo "Build $IN_PROGRESS is still running. Waiting ${WAIT_INTERVAL}s... (${ELAPSED}s elapsed)"
+            sleep "$WAIT_INTERVAL"
+            ELAPSED=$((ELAPSED + WAIT_INTERVAL))
+          done
+
+          BUILD_INFO="$(gh api repos/${{ github.repository }}/actions/workflows/build.yml/runs \
+            --jq ".workflow_runs[] | select(.head_branch==\"${BRANCH}\" and .conclusion==\"success\") | {id: .id, sha: .head_sha}" \
+            | head -1)"
+
+          if [ -z "$BUILD_INFO" ]; then
+            echo "ERROR: No successful build found for branch ${BRANCH}"
+            exit 1
+          fi
+
+          RUN_ID="$(echo "$BUILD_INFO" | jq -r '.id')"
+          SHA="$(echo "$BUILD_INFO" | jq -r '.sha')"
+          ARTIFACT_NAME="$(gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}/artifacts" \
+            --jq '.artifacts[] | select(.name | endswith("'"${SHA}"'")) | select(.name | contains("ubuntu-24.04-arm") | not) | .name' \
+            | head -1)"
+
+          if [ -z "$ARTIFACT_NAME" ]; then
+            echo "ERROR: No x86_64 artifact found for run $RUN_ID (sha=$SHA)"
+            gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}/artifacts" --jq '.artifacts[].name'
+            exit 1
+          fi
+
+          echo "run_id=${RUN_ID}" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=${ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+
+  resolve-rb2-source:
+    needs: check-build-status
+    runs-on: runs-on=${{ github.run_id }}/runner=1cpu-linux-x64
+    outputs:
+      install_source: ${{ steps.finalize.outputs.install_source }}
+      s3_bucket: ${{ steps.finalize.outputs.s3_bucket }}
+      s3_key: ${{ steps.finalize.outputs.s3_key }}
+      binary_url: ${{ steps.finalize.outputs.binary_url }}
+      checksum_url: ${{ steps.finalize.outputs.checksum_url }}
+    steps:
+      - name: Validate requested install source
+        id: mode
+        env:
+          INPUT_INSTALL_SOURCE: ${{ github.event.inputs.rb2_install_source || 's3_latest' }}
+          INPUT_S3_BUCKET: ${{ github.event.inputs.rb2_s3_bucket || '' }}
+          INPUT_S3_KEY: ${{ github.event.inputs.rb2_s3_key || '' }}
+          INPUT_BINARY_URL: ${{ github.event.inputs.rb2_binary_url || '' }}
+          INPUT_CHECKSUM_URL: ${{ github.event.inputs.rb2_checksum_url || '' }}
+        run: |
+          case "$INPUT_INSTALL_SOURCE" in
+            s3_latest|build_artifact|github_release)
+              ;;
+            s3_object)
+              [ -n "$INPUT_S3_BUCKET" ] || { echo "rb2_s3_bucket is required for s3_object"; exit 1; }
+              [ -n "$INPUT_S3_KEY" ] || { echo "rb2_s3_key is required for s3_object"; exit 1; }
+              ;;
+            direct_url)
+              [ -n "$INPUT_BINARY_URL" ] || { echo "rb2_binary_url is required for direct_url"; exit 1; }
+              ;;
+            *)
+              echo "Unsupported rb2_install_source: $INPUT_INSTALL_SOURCE"
+              exit 1
+              ;;
+          esac
+
+          echo "install_source=${INPUT_INSTALL_SOURCE}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials via OIDC
+        if: steps.mode.outputs.install_source == 'build_artifact'
+        run: |
+          if [ -z "${AWS_ROLE_ARN}" ]; then
+            echo "AWS_ROLE_ARN repo variable is required for OIDC-backed artifact resolution."
+            exit 1
+          fi
+
+      - name: Configure AWS credentials via OIDC
+        if: steps.mode.outputs.install_source == 'build_artifact'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Download rb2 build artifact
+        if: steps.mode.outputs.install_source == 'build_artifact'
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.check-build-status.outputs.artifact_name }}
+          github-token: ${{ github.token }}
+          run-id: ${{ needs.check-build-status.outputs.run_id }}
+          path: artifacts/
+
+      - name: Upload build artifact to manual S3 path
+        if: steps.mode.outputs.install_source == 'build_artifact'
+        id: upload-build
+        env:
+          BUILD_BRANCH: ${{ needs.check-build-status.outputs.branch }}
+          BUILD_SHA: ${{ needs.check-build-status.outputs.sha }}
+        run: |
+          RB2_PATH="$(rg --files artifacts | rg '/rb2-x86_64-linux$|^artifacts/rb2-x86_64-linux$|/rb2$|^artifacts/rb2$' | head -1)"
+          if [ -z "$RB2_PATH" ]; then
+            echo "ERROR: rb2 binary not found in downloaded artifact"
+            exit 1
+          fi
+
+          CHECKSUM_PATH="$(rg --files artifacts | rg '/rb2-x86_64-linux\\.sha256$|^artifacts/rb2-x86_64-linux\\.sha256$|/rb2\\.sha256$|^artifacts/rb2\\.sha256$' | head -1 || true)"
+          SAFE_BRANCH="$(echo "$BUILD_BRANCH" | sed 's#[/\\:]#-#g')"
+          S3_KEY="manual-builds/${SAFE_BRANCH}/${BUILD_SHA}/x86_64/rb2"
+
+          aws s3 cp "$RB2_PATH" "s3://${RB2_RELEASE_BUCKET}/${S3_KEY}"
+          if [ -n "$CHECKSUM_PATH" ]; then
+            awk '{print $1 "  rb2"}' "$CHECKSUM_PATH" > /tmp/rb2.sha256
+            aws s3 cp /tmp/rb2.sha256 "s3://${RB2_RELEASE_BUCKET}/${S3_KEY}.sha256"
+          fi
+
+          echo "s3_bucket=${RB2_RELEASE_BUCKET}" >> "$GITHUB_OUTPUT"
+          echo "s3_key=${S3_KEY}" >> "$GITHUB_OUTPUT"
+
+      - name: Finalize resolved install source
+        id: finalize
+        env:
+          INPUT_INSTALL_SOURCE: ${{ github.event.inputs.rb2_install_source || 's3_latest' }}
+          INPUT_S3_BUCKET: ${{ github.event.inputs.rb2_s3_bucket || '' }}
+          INPUT_S3_KEY: ${{ github.event.inputs.rb2_s3_key || '' }}
+          INPUT_BINARY_URL: ${{ github.event.inputs.rb2_binary_url || '' }}
+          INPUT_CHECKSUM_URL: ${{ github.event.inputs.rb2_checksum_url || '' }}
+          BUILD_ARTIFACT_BUCKET: ${{ steps.upload-build.outputs.s3_bucket }}
+          BUILD_ARTIFACT_KEY: ${{ steps.upload-build.outputs.s3_key }}
+        run: |
+          case "$INPUT_INSTALL_SOURCE" in
+            build_artifact)
+              echo "install_source=s3_object" >> "$GITHUB_OUTPUT"
+              echo "s3_bucket=${BUILD_ARTIFACT_BUCKET}" >> "$GITHUB_OUTPUT"
+              echo "s3_key=${BUILD_ARTIFACT_KEY}" >> "$GITHUB_OUTPUT"
+              echo "binary_url=" >> "$GITHUB_OUTPUT"
+              echo "checksum_url=" >> "$GITHUB_OUTPUT"
+              ;;
+            s3_object)
+              echo "install_source=s3_object" >> "$GITHUB_OUTPUT"
+              echo "s3_bucket=${INPUT_S3_BUCKET}" >> "$GITHUB_OUTPUT"
+              echo "s3_key=${INPUT_S3_KEY}" >> "$GITHUB_OUTPUT"
+              echo "binary_url=" >> "$GITHUB_OUTPUT"
+              echo "checksum_url=" >> "$GITHUB_OUTPUT"
+              ;;
+            direct_url)
+              echo "install_source=direct_url" >> "$GITHUB_OUTPUT"
+              echo "s3_bucket=" >> "$GITHUB_OUTPUT"
+              echo "s3_key=" >> "$GITHUB_OUTPUT"
+              echo "binary_url=${INPUT_BINARY_URL}" >> "$GITHUB_OUTPUT"
+              echo "checksum_url=${INPUT_CHECKSUM_URL}" >> "$GITHUB_OUTPUT"
+              ;;
+            github_release)
+              echo "install_source=github_release" >> "$GITHUB_OUTPUT"
+              echo "s3_bucket=" >> "$GITHUB_OUTPUT"
+              echo "s3_key=" >> "$GITHUB_OUTPUT"
+              echo "binary_url=" >> "$GITHUB_OUTPUT"
+              echo "checksum_url=" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "install_source=s3_latest" >> "$GITHUB_OUTPUT"
+              echo "s3_bucket=" >> "$GITHUB_OUTPUT"
+              echo "s3_key=" >> "$GITHUB_OUTPUT"
+              echo "binary_url=" >> "$GITHUB_OUTPUT"
+              echo "checksum_url=" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+  deploy-and-verify:
+    needs: [resolve-rb2-source]
+    runs-on: runs-on=${{ github.run_id }}/runner=1cpu-linux-x64
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Resolve e2e-tests ref
+        id: e2e-ref
+        run: |
+          E2E_REF="$(git ls-tree HEAD e2e-tests | awk '{print $3}')"
+          if [ -z "${E2E_REF}" ]; then
+            echo "Failed to resolve the pinned e2e-tests gitlink from red-baron-2."
+            exit 1
+          fi
+          echo "ref=${E2E_REF}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout e2e-tests
+        uses: actions/checkout@v6
+        with:
+          repository: HackUCF/red-baron-2-e2e
+          path: e2e-tests
+          ref: ${{ steps.e2e-ref.outputs.ref }}
+          ssh-key: ${{ secrets.E2E_DEPLOY_KEY }}
+
+      - name: Verify AWS OIDC configuration
+        run: |
+          if [ -z "${AWS_ROLE_ARN}" ]; then
+            echo "AWS_ROLE_ARN repo variable is required for the passive E2E workflow."
+            exit 1
+          fi
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.0"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        working-directory: e2e-tests/orchestrator
+        run: |
+          pip install -r requirements.txt
+
+      - name: Install Ansible and AWS collections
+        run: |
+          pip install ansible-core boto3 botocore
+          ansible-galaxy collection install amazon.aws community.aws
+
+      - name: Terraform init
+        working-directory: e2e-tests/terraform
+        run: |
+          terraform init \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="key=e2e-tests/terraform.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="dynamodb_table=${TF_STATE_DYNAMODB_TABLE}" \
+            -backend-config="encrypt=true"
+
+      - name: Terraform validate
+        working-directory: e2e-tests/terraform
+        run: terraform validate
+
+      - name: Import existing IAM resources if needed
+        working-directory: e2e-tests/terraform
+        continue-on-error: true
+        run: |
+          terraform import aws_iam_role.ec2_role rb2-e2e-ec2-role 2>/dev/null || echo "Role already in state or not present"
+          terraform import aws_iam_instance_profile.ec2_profile rb2-e2e-ec2-profile 2>/dev/null || echo "Instance profile already in state or not present"
+
+      - name: Terraform apply
+        working-directory: e2e-tests/terraform
+        run: |
+          extra_args=()
+          if [ -n "${TEST_HOSTS_JSON}" ]; then
+            extra_args+=("-var=test_hosts=${TEST_HOSTS_JSON}")
+          fi
+          terraform apply -auto-approve \
+            -var="aws_region=${AWS_REGION}" \
+            -var="vpc_id=${VPC_ID}" \
+            -var="instance_type=${INSTANCE_TYPE}" \
+            -var="ansible_ssm_bucket_name=${ANSIBLE_SSM_BUCKET_NAME}" \
+            -var="rb2_release_bucket_name=${RB2_RELEASE_BUCKET}" \
+            -var="rb2_release_latest_prefix=${RB2_RELEASE_LATEST_PREFIX}" \
+            "${extra_args[@]}"
+
+      - name: Read Terraform outputs
+        id: terraform
+        working-directory: e2e-tests/terraform
+        run: |
+          terraform output -json test_hosts > test-hosts.json
+          echo "test_hosts_json_path=${PWD}/test-hosts.json" >> "$GITHUB_OUTPUT"
+          echo "openobserve_url=$(terraform output -raw openobserve_url)" >> "$GITHUB_OUTPUT"
+          echo "openobserve_email_param=$(terraform output -raw openobserve_email)" >> "$GITHUB_OUTPUT"
+          echo "openobserve_password_param=$(terraform output -raw openobserve_password)" >> "$GITHUB_OUTPUT"
+          echo "ansible_ssm_bucket_name=$(terraform output -raw ansible_ssm_bucket_name)" >> "$GITHUB_OUTPUT"
+          echo "rb2_release_bucket_name=$(terraform output -raw rb2_release_bucket_name)" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for OpenObserve to be ready
+        env:
+          OPENOBSERVE_URL: ${{ steps.terraform.outputs.openobserve_url }}
+          OPENOBSERVE_EMAIL_PARAM: ${{ steps.terraform.outputs.openobserve_email_param }}
+          OPENOBSERVE_PASSWORD_PARAM: ${{ steps.terraform.outputs.openobserve_password_param }}
+        run: |
+          OPENOBSERVE_EMAIL="$(aws ssm get-parameter --name "$OPENOBSERVE_EMAIL_PARAM" --with-decryption --region "${AWS_REGION}" --query 'Parameter.Value' --output text)"
+          OPENOBSERVE_PASSWORD="$(aws ssm get-parameter --name "$OPENOBSERVE_PASSWORD_PARAM" --with-decryption --region "${AWS_REGION}" --query 'Parameter.Value' --output text)"
+          python3 e2e-tests/orchestrator/openobserve_query.py \
+            --url "${OPENOBSERVE_URL}" \
+            --username "${OPENOBSERVE_EMAIL}" \
+            --password "${OPENOBSERVE_PASSWORD}" \
+            --health-check \
+            --timeout 300
+
+      - name: Run passive deploy-and-verify flow
+        working-directory: e2e-tests/orchestrator
+        env:
+          TEST_HOSTS_JSON_PATH: ${{ steps.terraform.outputs.test_hosts_json_path }}
+          OPENOBSERVE_URL: ${{ steps.terraform.outputs.openobserve_url }}
+          OPENOBSERVE_EMAIL_PARAM: ${{ steps.terraform.outputs.openobserve_email_param }}
+          OPENOBSERVE_PASSWORD_PARAM: ${{ steps.terraform.outputs.openobserve_password_param }}
+          ANSIBLE_SSM_BUCKET_NAME: ${{ steps.terraform.outputs.ansible_ssm_bucket_name }}
+          RB2_RELEASE_BUCKET: ${{ steps.terraform.outputs.rb2_release_bucket_name }}
+          RB2_RELEASE_LATEST_PREFIX: ${{ env.RB2_RELEASE_LATEST_PREFIX }}
+          RB2_INSTALL_SOURCE: ${{ needs.resolve-rb2-source.outputs.install_source }}
+          RB2_S3_BUCKET: ${{ needs.resolve-rb2-source.outputs.s3_bucket }}
+          RB2_S3_KEY: ${{ needs.resolve-rb2-source.outputs.s3_key }}
+          RB2_BINARY_URL: ${{ needs.resolve-rb2-source.outputs.binary_url }}
+          RB2_CHECKSUM_URL: ${{ needs.resolve-rb2-source.outputs.checksum_url }}
+          RB2_STREAM_PREFIX: ${{ env.RB2_STREAM_PREFIX }}
+          VERIFY_WAIT_MINUTES: ${{ env.VERIFY_WAIT_MINUTES }}
+          VERIFY_LOOKBACK_MINUTES: ${{ env.VERIFY_LOOKBACK_MINUTES }}
+          RB2_RESULTS_DIR: ${{ github.workspace }}/e2e-tests/results
+          RB2_HOST_ID_MAP_PATH: ${{ github.workspace }}/e2e-tests/results/host-id-map.json
+          AWS_REGION: ${{ env.AWS_REGION }}
+          OBJC_DISABLE_INITIALIZE_FORK_SAFETY: YES
+        run: |
+          export ANSIBLE_PLAYBOOK_BIN="$(command -v ansible-playbook)"
+          python3 -u deploy_and_verify.py
+
+      - name: Upload passive E2E results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: passive-e2e-results
+          path: e2e-tests/results/
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Terraform destroy
+        if: always()
+        working-directory: e2e-tests/terraform
+        run: |
+          extra_args=()
+          if [ -n "${TEST_HOSTS_JSON}" ]; then
+            extra_args+=("-var=test_hosts=${TEST_HOSTS_JSON}")
+          fi
+          terraform destroy -auto-approve \
+            -var="aws_region=${AWS_REGION}" \
+            -var="vpc_id=${VPC_ID}" \
+            -var="instance_type=${INSTANCE_TYPE}" \
+            -var="ansible_ssm_bucket_name=${ANSIBLE_SSM_BUCKET_NAME}" \
+            -var="rb2_release_bucket_name=${RB2_RELEASE_BUCKET}" \
+            -var="rb2_release_latest_prefix=${RB2_RELEASE_LATEST_PREFIX}" \
+            "${extra_args[@]}"
+
+  collect-artifacts:
+    needs: deploy-and-verify
+    runs-on: runs-on=${{ github.run_id }}/runner=1cpu-linux-x64
+    if: always()
+    steps:
+      - name: Resolve commit SHA and branch
+        id: vars
+        run: |
+          echo "branch=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Download passive E2E results
+        uses: actions/download-artifact@v4
+        with:
+          name: passive-e2e-results
+          path: aggregated-results
+        continue-on-error: true
+
+      - name: Generate passive E2E summary
+        env:
+          BRANCH: ${{ steps.vars.outputs.branch }}
+          SHA: ${{ steps.vars.outputs.sha }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          run_url = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          commit_url = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/commit/{os.environ['SHA']}"
+          summary_path = Path("test-summary.md")
+          deploy_summary_path = next(iter(Path("aggregated-results").rglob("deploy-summary.json")), None)
+          verify_report_path = next(iter(Path("aggregated-results").rglob("verify-openobserve-hosts.json")), None)
+
+          lines = [
+              "# E2E Test Results Summary",
+              "",
+              "## Test Execution",
+              f"- **Branch:** `{os.environ['BRANCH']}`",
+              f"- **Commit:** [`{os.environ['SHA'][:7]}`]({commit_url})",
+              f"- **Workflow run:** [View run]({run_url})",
+              "",
+          ]
+
+          if not deploy_summary_path or not verify_report_path:
+              lines.extend([
+                  "## Results",
+                  "",
+                  "**Overall: FAILED**",
+                  "",
+                  "Passive E2E result artifacts were not found.",
+              ])
+          else:
+              deploy_summary = json.loads(deploy_summary_path.read_text())
+              verify_report = json.loads(verify_report_path.read_text())
+              overall_ok = bool(deploy_summary.get("ok")) and bool(verify_report.get("ok"))
+              lines.extend([
+                  "## Results",
+                  "",
+                  f"**Overall: {'PASSED' if overall_ok else 'FAILED'}**",
+                  "",
+                  f"- **OpenObserve URL:** `{deploy_summary.get('openobserve_url', '')}`",
+                  f"- **Stream prefix:** `{deploy_summary.get('stream_prefix', '')}`",
+                  f"- **Wait before verify:** `{deploy_summary.get('wait_minutes', '')}` minute(s)",
+                  f"- **Log lookback window:** `{deploy_summary.get('verify_lookback_minutes', '')}` minute(s)",
+                  "",
+                  "## Host IDs",
+                  "",
+              ])
+
+              for instance_id, host_id in sorted((deploy_summary.get("host_id_map") or {}).items()):
+                  lines.append(f"- `{instance_id}` -> `{host_id}`")
+
+              lines.extend(["", "## Stream Verification", ""])
+              for result in verify_report.get("results", []):
+                  status = "PASS" if result.get("ok") else "FAIL"
+                  lines.append(f"### {status} {result.get('log_type', 'unknown')}")
+                  lines.append(f"- Stream: `{result.get('stream_name', '')}`")
+                  lines.append(f"- Inspected events: `{result.get('inspected_event_count', 0)}`")
+                  lines.append(f"- Matching events: `{result.get('matching_event_count', 0)}`")
+                  seen = ", ".join(result.get("seen_host_ids", [])) or "(none)"
+                  lines.append(f"- Seen host IDs: `{seen}`")
+                  missing = ", ".join(result.get("missing_host_ids", [])) or "(none)"
+                  unexpected = ", ".join(result.get("unexpected_host_ids", [])) or "(none)"
+                  abnormal = ", ".join(result.get("abnormal_host_ids", [])) or "(none)"
+                  lines.append(f"- Missing host IDs: `{missing}`")
+                  lines.append(f"- Unexpected host IDs: `{unexpected}`")
+                  lines.append(f"- Abnormal host IDs: `{abnormal}`")
+                  lines.append("")
+
+          summary_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
+
+      - name: Add summary to job output
+        run: cat test-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-summary
+          path: test-summary.md
+          retention-days: 30
+
+  comment-on-pr:
+    needs: [collect-artifacts]
+    runs-on: runs-on=${{ github.run_id }}/runner=1cpu-linux-x64
+    if: always() && !cancelled() && needs.collect-artifacts.result != 'skipped'
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Download test summary
+        uses: actions/download-artifact@v4
+        with:
+          name: test-summary
+          path: summary
+        continue-on-error: true
+
+      - name: Resolve commit SHA and branch
+        id: ctx
+        run: |
+          echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          echo "branch=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Post E2E results to PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const summaryPath = path.join('summary', 'test-summary.md');
+            if (!fs.existsSync(summaryPath)) {
+              console.log('No test summary found, skipping PR comment.');
+              return;
+            }
+            let body = fs.readFileSync(summaryPath, 'utf8');
+            const marker = '<!-- e2e-test-results -->';
+            body = marker + '\n\n' + body;
+
+            const sha = '${{ steps.ctx.outputs.sha }}';
+            const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: sha,
+            });
+            const pr = prs.filter((p) => p.state === 'open')[0];
+            if (!pr) {
+              console.log('No open PR for this commit, skipping comment.');
+              return;
+            }
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+            });
+            const existing = comments.find((c) =>
+              c.user && c.user.login === 'github-actions[bot]' && c.body && c.body.includes(marker),
+            );
+
+            const maxLen = 65500;
+            if (body.length > maxLen) {
+              body = body.slice(0, maxLen) + '\n\n… *(truncated)*';
+            }
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+              console.log('Updated existing E2E results comment.');
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body,
+              });
+              console.log('Created new E2E results comment.');
+            }

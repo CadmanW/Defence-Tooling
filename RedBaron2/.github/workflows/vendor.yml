@@ -1,0 +1,50 @@
+name: Vendor dependencies
+
+on:
+  workflow_dispatch:
+
+jobs:
+  vendored-bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: git submodule init
+      - run: git submodule update rb2-ebpf/libbpf
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.24.4'
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - run: cargo install cargo-vendor-filterer
+      - run: cargo vendor-filterer --platform=x86_64-unknown-linux-musl --platform=x86_64-unknown-freebsd
+      - run: |
+          cat << 'EOF' > .cargo/config.toml
+          
+          [source.crates-io]
+          replace-with = "vendored-sources"
+  
+          [source.vendored-sources]
+          directory = "vendor"
+          EOF
+      - run: ./rb2-web-gui/vendor.sh
+      - run: ./rb2-web-gui/vendored-build.sh
+      - run: tar -cJf vendor.tar.xz vendor
+      - run: rm -f rb2-web-gui/rb2-web
+      - run: |
+          source buildvars.sh
+          curl -fsSL "$YARA_RULES_URL" -o "yara_linux_upstream.tar.xz"
+          mkdir -p yara_linux
+          tar xf yara_linux_upstream.tar.xz -C yara_linux
+          tar -cJf yara_linux.tar.xz yara_linux
+          rm -rf yara_linux yara_linux_upstream.tar.xz
+      - run: |
+          rm -rf rb2-ebpf/libbpf/assets rb2-ebpf/libbpf/.github
+          tar -cJf libbpf.tar.xz rb2-ebpf/libbpf
+          rm -rf rb2-ebpf/libbpf
+          rm -rf vendor .git
+      - uses: actions/upload-artifact@v6
+        with:
+          name: vendor-artifact
+          path: .
+          include-hidden-files: true

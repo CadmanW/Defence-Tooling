@@ -1,0 +1,17 @@
+name: sigma_file_deletion
+mode: alert
+overlap_allowed_with: [rta_shred_log_files, sigma_clear_logs, sigma_clear_syslog, sigma_susp_history_delete]
+eval: |
+  (
+    (e.process_name == "shred" || e.process_name == "unlink")
+  )
+
+tests:
+  - cleartext: "shred execution"
+    process_name: shred
+    process_args: "shred"
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

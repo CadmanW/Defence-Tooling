@@ -1,0 +1,28 @@
+name: rta_dd_proc_mem_injection
+mode: alert
+eval: |
+  (
+    e.process_name == "dd" &&
+    re_match(e.process_args, "(of|if)=/proc/[0-9]+/mem")
+  )
+tests:
+  - cleartext: "dd writing to process memory"
+    process_name: dd
+    process_args: "dd if=payload.bin of=/proc/1234/mem"
+    should_match: true
+  - cleartext: "dd memory injection with seek"
+    process_name: dd
+    process_args: "dd if=/tmp/shellcode of=/proc/5678/mem bs=1 seek=134217728"
+    should_match: true
+  - cleartext: "dd reading process memory"
+    process_name: dd
+    process_args: "dd if=/proc/1234/mem of=/tmp/memdump bs=1M count=10"
+    should_match: true
+  - cleartext: "normal dd disk operation"
+    process_name: dd
+    process_args: "dd if=/dev/zero of=/tmp/test bs=1M count=100"
+    should_match: false
+  - cleartext: "dd copying files"
+    process_name: dd
+    process_args: "dd if=/tmp/input.bin of=/tmp/output.bin"
+    should_match: false

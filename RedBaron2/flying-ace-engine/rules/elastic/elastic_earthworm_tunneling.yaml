@@ -1,0 +1,44 @@
+name: elastic_earthworm_tunneling
+mode: alert
+eval: |
+  (
+    (
+      e.process_name == "ew" || 
+      e.process_name == "earthworm" ||
+      e.process_args.contains("ew_for_") ||
+      e.process_args.contains("earthworm")
+    ) &&
+    (
+      e.process_args.contains("-s") ||
+      e.process_args.contains("ssocksd") ||
+      e.process_args.contains("rcsocks") ||
+      e.process_args.contains("rssocks") ||
+      e.process_args.contains("lcx_slave") ||
+      e.process_args.contains("lcx_tran")
+    )
+  )
+tests:
+  - cleartext: "ew -s ssocksd -l 1080"
+    process_name: ew
+    process_args: "ew -s ssocksd -l 1080"
+    should_match: true
+  - cleartext: "./ew_for_linux -s rcsocks -l 1080 -e 8888"
+    process_name: ew_for_linux
+    process_args: "./ew_for_linux -s rcsocks -l 1080 -e 8888"
+    should_match: true
+  - cleartext: "earthworm -s rssocks -d 10.0.0.1 -e 8888"
+    process_name: earthworm
+    process_args: "earthworm -s rssocks -d 10.0.0.1 -e 8888"
+    should_match: true
+  - cleartext: "ew -s lcx_tran -l 1080 -f 10.0.0.2 -g 3389"
+    process_name: ew
+    process_args: "ew -s lcx_tran -l 1080 -f 10.0.0.2 -g 3389"
+    should_match: true
+  - cleartext: "wget http://example.com/ew_for_linux"
+    process_name: wget
+    process_args: "wget http://example.com/ew_for_linux"
+    should_match: false
+  - cleartext: "ls -la"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

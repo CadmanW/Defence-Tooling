@@ -1,0 +1,28 @@
+name: rta_ptrace_process_injection
+mode: alert
+eval: |
+  (
+    (e.process_name == "strace" || e.process_name == "ltrace") &&
+    re_match(e.process_args, "-p\\s+[0-9]+") &&
+    (
+      re_match(e.process_args, "-e\\s+trace=write") ||
+      re_match(e.process_args, "-e\\s+inject")
+    )
+  )
+tests:
+  - cleartext: "strace attach to process"
+    process_name: strace
+    process_args: "strace -p 1234 -e trace=write"
+    should_match: true
+  - cleartext: "strace with inject"
+    process_name: strace
+    process_args: "strace -p 5678 -e inject=write:retval=0"
+    should_match: true
+  - cleartext: "ltrace attach"
+    process_name: ltrace
+    process_args: "ltrace -p 9999 -e trace=write"
+    should_match: true
+  - cleartext: "normal strace on command"
+    process_name: strace
+    process_args: "strace ls -la"
+    should_match: false

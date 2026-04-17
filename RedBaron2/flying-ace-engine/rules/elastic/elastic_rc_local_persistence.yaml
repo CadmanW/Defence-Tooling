@@ -1,0 +1,47 @@
+name: elastic_rc_local_persistence
+mode: alert
+eval: |
+  (
+    (
+      e.process_args.contains("/etc/rc.local") ||
+      e.process_args.contains("/etc/rc.d/rc.local") ||
+      e.process_args.contains("/etc/init.d/")
+    ) &&
+    (
+      e.process_name == "echo" ||
+      e.process_name == "tee" ||
+      e.process_name == "cp" ||
+      e.process_name == "mv" ||
+      e.process_name == "chmod" ||
+      e.process_name == "ln"
+    )
+  )
+tests:
+  - cleartext: "echo backdoor to rc.local"
+    process_name: echo
+    process_args: "echo '/tmp/backdoor.sh &' >> /etc/rc.local"
+    should_match: true
+  - cleartext: "tee to rc.local"
+    process_name: tee
+    process_args: "tee -a /etc/rc.local"
+    should_match: true
+  - cleartext: "chmod rc.local executable"
+    process_name: chmod
+    process_args: "chmod +x /etc/rc.local"
+    should_match: true
+  - cleartext: "copy script to init.d"
+    process_name: cp
+    process_args: "cp backdoor /etc/init.d/malicious"
+    should_match: true
+  - cleartext: "symlink in init.d"
+    process_name: ln
+    process_args: "ln -s /tmp/evil /etc/init.d/startup"
+    should_match: true
+  - cleartext: "normal chmod"
+    process_name: chmod
+    process_args: "chmod 644 /home/user/file.txt"
+    should_match: false
+  - cleartext: "echo to stdout"
+    process_name: echo
+    process_args: "echo test"
+    should_match: false

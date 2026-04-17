@@ -1,0 +1,50 @@
+name: process_from_memory
+mode: alert
+eval: |
+  (
+    (
+      e.process_executable.contains("/fd/") ||
+      e.process_executable.contains("memfd") ||
+      e.process_executable.contains("/dev/shm/")
+    ) &&
+    (
+      e.process_executable.contains("/proc/self/fd/") ||
+      re_match(e.process_executable, "/proc/\\d+/fd/") ||
+      e.process_executable.contains("/dev/shm/") ||
+      e.process_executable.contains("/memfd:") ||
+      e.process_executable.contains("memfd:")
+    ) &&
+      e.process_ppid != 1
+  )
+tests:
+  - cleartext: "process executed from /proc/self/fd/3 (memfd_create)"
+    process_name: payload
+    process_executable: "/proc/self/fd/3"
+    process_args: "payload"
+    should_match: true
+  - cleartext: "process executed from /proc/1234/fd/5"
+    process_name: exploit
+    process_executable: "/proc/1234/fd/5"
+    process_args: "exploit"
+    should_match: true
+  - cleartext: "process executed from /dev/shm/dropper"
+    process_name: dropper
+    process_executable: "/dev/shm/dropper"
+    process_args: "dropper"
+    should_match: true
+  - cleartext: "process executed from memfd:anonymous"
+    process_name: anon
+    process_executable: "/memfd:anonymous"
+    process_args: "anon"
+    should_match: true
+  - cleartext: "/usr/bin/ls (normal binary)"
+    process_name: ls
+    process_executable: "/usr/bin/ls"
+    process_args: "ls -la"
+    should_match: false
+  - cleartext: "systemd executor"
+    process_name: "9"
+    process_executable: "/proc/self/fd/9"
+    process_args: "/usr/lib/systemd/systemd-executor --deserialize 97 --log-level info --log-target journal-or-kmsg"
+    process_ppid: 1
+    should_match: false

@@ -1,0 +1,29 @@
+name: rta_ldap_group_enumeration
+mode: alert
+eval: |
+  (
+    e.process_name == "ldapsearch" &&
+    (
+      e.process_args.contains("objectClass=group") ||
+      e.process_args.contains("CN=Domain Admins") ||
+      e.process_args.contains("CN=Administrators") ||
+      e.process_args.contains("memberOf")
+    )
+  )
+tests:
+  - cleartext: "ldapsearch objectClass=group"
+    process_name: ldapsearch
+    process_args: "ldapsearch -x -H ldap://dc.domain.local -b dc=domain,dc=local (objectClass=group)"
+    should_match: true
+  - cleartext: "ldapsearch Domain Admins"
+    process_name: ldapsearch
+    process_args: "ldapsearch -x -b CN=Domain Admins,CN=Groups,DC=domain,DC=local"
+    should_match: true
+  - cleartext: "ldapsearch memberOf attribute"
+    process_name: ldapsearch
+    process_args: "ldapsearch -x -b dc=example,dc=com memberOf=CN=Admins,DC=example,DC=com"
+    should_match: true
+  - cleartext: "normal ldapsearch for single user"
+    process_name: ldapsearch
+    process_args: "ldapsearch -x -b dc=example,dc=com (uid=jdoe)"
+    should_match: false

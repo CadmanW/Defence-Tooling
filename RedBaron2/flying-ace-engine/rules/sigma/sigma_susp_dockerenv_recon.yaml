@@ -1,0 +1,16 @@
+name: sigma_susp_dockerenv_recon
+mode: alert
+eval: |
+  (
+    (e.process_name == "cat" || e.process_name == "dir" || e.process_name == "find" || e.process_name == "ls" || e.process_name == "stat" || e.process_name == "test" || e.process_name.ends_with("grep")) && e.process_args.ends_with(".dockerenv")
+  )
+
+tests:
+  - cleartext: "cat dockerenv"
+    process_name: cat
+    process_args: "cat /.dockerenv"
+    should_match: true
+  - cleartext: "normal cat"
+    process_name: cat
+    process_args: "cat /etc/hosts"
+    should_match: false

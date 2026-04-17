@@ -1,0 +1,33 @@
+name: rta_find_exec_shell
+mode: alert
+eval: |
+  (
+    e.process_name == "find" &&
+    re_match(e.process_args, "-exec") &&
+    (
+      re_match(e.process_args, "/bin/(sh|bash)") ||
+      re_match(e.process_args, "-exec\\s+sh") ||
+      re_match(e.process_args, "-exec\\s+bash")
+    )
+  )
+tests:
+  - cleartext: "find -exec shell spawn"
+    process_name: find
+    process_args: "find . -exec /bin/sh \\; -quit"
+    should_match: true
+  - cleartext: "find -exec bash interactive"
+    process_name: find
+    process_args: "find / -name test -exec /bin/bash -i \\;"
+    should_match: true
+  - cleartext: "find -exec sh with args"
+    process_name: find
+    process_args: "find . -type f -exec sh -c 'echo {}' \\;"
+    should_match: true
+  - cleartext: "normal find with -exec chmod"
+    process_name: find
+    process_args: "find /var/www -type f -exec chmod 644 {} \\;"
+    should_match: false
+  - cleartext: "find without -exec"
+    process_name: find
+    process_args: "find /tmp -name '*.tmp'"
+    should_match: false

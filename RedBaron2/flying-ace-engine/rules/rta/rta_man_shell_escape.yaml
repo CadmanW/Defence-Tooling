@@ -1,0 +1,22 @@
+name: rta_man_shell_escape
+mode: alert
+eval: |
+  (
+    (e.process_pname == "man" && (e.process_name == "sh" || e.process_name == "bash")) ||
+    (e.process_name == "man" && re_match(e.process_args, "!/bin/(sh|bash)"))
+  )
+tests:
+  - cleartext: "man shell escape to sh"
+    process_name: sh
+    process_pname: man
+    process_args: "/bin/sh"
+    should_match: true
+  - cleartext: "man shell escape to bash"
+    process_name: bash
+    process_pname: man
+    process_args: "/bin/bash"
+    should_match: true
+  - cleartext: "normal man page viewing"
+    process_name: man
+    process_args: "man ls"
+    should_match: false

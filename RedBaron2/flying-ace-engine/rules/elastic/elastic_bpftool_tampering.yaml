@@ -1,0 +1,36 @@
+name: elastic_bpftool_tampering
+mode: alert
+eval: |
+  (
+    e.process_name == "bpftool" &&
+    (
+      (e.process_args.contains("prog") && e.process_args.contains("detach")) ||
+      (e.process_args.contains("map") && (e.process_args.contains("delete") || e.process_args.contains("update"))) ||
+      (e.process_args.contains("link") && e.process_args.contains("detach"))
+    )
+  )
+tests:
+  - cleartext: "bpftool prog detach id 123"
+    process_name: bpftool
+    process_args: "bpftool prog detach id 123"
+    should_match: true
+  - cleartext: "bpftool map delete id 456"
+    process_name: bpftool
+    process_args: "bpftool map delete id 456"
+    should_match: true
+  - cleartext: "bpftool map update id 789 key 1 value 0"
+    process_name: bpftool
+    process_args: "bpftool map update id 789 key 1 value 0"
+    should_match: true
+  - cleartext: "bpftool link detach id 321"
+    process_name: bpftool
+    process_args: "bpftool link detach id 321"
+    should_match: true
+  - cleartext: "bpftool prog show"
+    process_name: bpftool
+    process_args: "bpftool prog show"
+    should_match: false
+  - cleartext: "bpftool map list"
+    process_name: bpftool
+    process_args: "bpftool map list"
+    should_match: false

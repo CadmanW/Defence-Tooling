@@ -1,0 +1,17 @@
+name: sigma_susp_history_delete
+mode: alert
+overlap_allowed_with: [sigma_file_deletion, histfile_removal]
+eval: |
+  (
+    ((e.process_name == "rm" || e.process_name == "unlink" || e.process_name == "shred")) && (((e.process_args.contains("/.bash_history") || e.process_args.contains("/.zsh_history")) || (e.process_args.ends_with("_history") || e.process_args.ends_with(".history") || e.process_args.ends_with("zhistory"))))
+  )
+
+tests:
+  - cleartext: "rm execution"
+    process_name: rm
+    process_args: "rm /.bash_history"
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

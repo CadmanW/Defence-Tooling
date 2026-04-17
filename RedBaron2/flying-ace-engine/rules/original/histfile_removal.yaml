@@ -1,0 +1,46 @@
+name: histfile_removal
+mode: alert
+overlap_allowed_with: [sigma_file_deletion, sigma_susp_history_delete, rta_shred_log_files]
+eval: |
+  (
+    (
+      e.process_name == "rm" ||
+      e.process_name == "shred" ||
+      e.process_name == "truncate" ||
+      e.process_name == "unset"
+    ) &&
+    (
+      e.process_args.contains("_history") ||
+      e.process_args.contains(".viminfo") ||
+      e.process_args.contains("HISTFILE")
+    )
+  )
+tests:
+  - cleartext: "rm -f ~/.bash_history"
+    process_name: "rm"
+    process_args: "rm -f ~/.bash_history"
+    should_match: true
+  - cleartext: "shred -u ~/.bash_history"
+    process_name: "shred"
+    process_args: "shred -u ~/.bash_history"
+    should_match: true
+  - cleartext: "truncate -s 0 ~/.zsh_history"
+    process_name: "truncate"
+    process_args: "truncate -s 0 ~/.zsh_history"
+    should_match: true
+  - cleartext: "unset HISTFILE"
+    process_name: "unset"
+    process_args: "unset HISTFILE"
+    should_match: true
+  - cleartext: "rm ~/.viminfo"
+    process_name: "rm"
+    process_args: "rm ~/.viminfo"
+    should_match: true
+  - cleartext: "rm /tmp/file.txt"
+    process_name: "rm"
+    process_args: "rm /tmp/file.txt"
+    should_match: false
+  - cleartext: "shred -u /tmp/secret.txt"
+    process_name: "shred"
+    process_args: "shred -u /tmp/secret.txt"
+    should_match: false

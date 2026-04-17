@@ -1,0 +1,23 @@
+name: sigma_webshell_detection
+mode: alert
+overlap_allowed_with: [sigma_local_account]
+eval: |
+  (
+    (((e.process_pname == "httpd" || e.process_pname == "lighttpd" || e.process_pname == "nginx" || e.process_pname == "apache2" || e.process_pname == "node" || e.process_pname == "caddy")) || (false /* ParentCommandLine not available in Rhai API */) || (false /* ParentCommandLine not available in Rhai API */)) && ((e.process_name == "whoami" || e.process_name == "ifconfig" || e.process_name == "ip" || e.process_name == "uname" || e.process_name == "cat" || e.process_name == "crontab" || e.process_name == "hostname" || e.process_name == "iptables" || e.process_name == "netstat" || e.process_name == "pwd" || e.process_name == "route"))
+  )
+
+tests:
+  - cleartext: "whoami from apache2 parent"
+    process_name: whoami
+    process_pname: apache2
+    process_args: "whoami"
+    should_match: true
+  - cleartext: "cat from nginx parent"
+    process_name: cat
+    process_pname: nginx
+    process_args: "cat /etc/passwd"
+    should_match: true
+  - cleartext: "normal whoami"
+    process_name: whoami
+    process_args: "whoami"
+    should_match: false

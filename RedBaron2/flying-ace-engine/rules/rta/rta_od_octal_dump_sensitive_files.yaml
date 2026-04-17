@@ -1,0 +1,33 @@
+name: rta_od_octal_dump_sensitive_files
+mode: alert
+eval: |
+  (
+    e.process_name == "od" &&
+    (
+      e.process_args.contains("/etc/shadow") ||
+      e.process_args.contains("/etc/passwd") ||
+      e.process_args.contains("/root/") ||
+      re_match(e.process_args, "\\.ssh/")
+    )
+  )
+tests:
+  - cleartext: "od dump /etc/shadow"
+    process_name: od
+    process_args: "od -An -tx1 /etc/shadow"
+    should_match: true
+  - cleartext: "od dump /etc/passwd"
+    process_name: od
+    process_args: "od -An -tx1 /etc/passwd"
+    should_match: true
+  - cleartext: "od dump ssh private key"
+    process_name: od
+    process_args: "od -An -tx1 ~/.ssh/id_rsa"
+    should_match: true
+  - cleartext: "od dump root directory file"
+    process_name: od
+    process_args: "od /root/.bashrc"
+    should_match: true
+  - cleartext: "normal od on regular file"
+    process_name: od
+    process_args: "od -An -tx1 /tmp/data.bin"
+    should_match: false

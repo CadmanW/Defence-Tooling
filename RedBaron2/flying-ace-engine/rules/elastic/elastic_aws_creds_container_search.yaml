@@ -1,0 +1,48 @@
+name: elastic_aws_creds_container_search
+mode: alert
+eval: |
+  (
+    (
+      e.process_args.contains("AWS_ACCESS_KEY_ID") ||
+      e.process_args.contains("AWS_SECRET_ACCESS_KEY") ||
+      e.process_args.contains("aws_access_key_id") ||
+      e.process_args.contains("aws_secret_access_key") ||
+      e.process_args.contains(".aws/credentials")
+    ) &&
+    (
+      e.process_name == "grep" ||
+      e.process_name == "find" ||
+      e.process_name == "cat" ||
+      e.process_name == "env" ||
+      e.process_name == "printenv"
+    )
+  )
+tests:
+  - cleartext: "env | grep AWS_ACCESS_KEY_ID"
+    process_name: env
+    process_args: "env | grep AWS_ACCESS_KEY_ID"
+    should_match: true
+  - cleartext: "grep -r AWS_SECRET_ACCESS_KEY /proc"
+    process_name: grep
+    process_args: "grep -r AWS_SECRET_ACCESS_KEY /proc"
+    should_match: true
+  - cleartext: "find /home -name .aws/credentials"
+    process_name: find
+    process_args: "find /home -name .aws/credentials"
+    should_match: true
+  - cleartext: "cat ~/.aws/credentials"
+    process_name: cat
+    process_args: "cat ~/.aws/credentials"
+    should_match: true
+  - cleartext: "printenv AWS_ACCESS_KEY_ID"
+    process_name: printenv
+    process_args: "printenv AWS_ACCESS_KEY_ID"
+    should_match: true
+  - cleartext: "env | grep HOME"
+    process_name: env
+    process_args: "env | grep HOME"
+    should_match: false
+  - cleartext: "grep error /var/log/syslog"
+    process_name: grep
+    process_args: "grep error /var/log/syslog"
+    should_match: false

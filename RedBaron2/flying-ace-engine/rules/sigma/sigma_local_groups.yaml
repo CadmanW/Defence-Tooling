@@ -1,0 +1,17 @@
+name: sigma_local_groups
+mode: alert
+overlap_allowed_with: [sigma_local_account]
+eval: |
+  (
+    (e.process_name == "groups") || ((e.process_name == "cat" || e.process_name == "ed" || e.process_name == "head" || e.process_name == "less" || e.process_name == "more" || e.process_name == "nano" || e.process_name == "tail" || e.process_name == "vi" || e.process_name == "vim") && e.process_args.contains("/etc/group"))
+  )
+
+tests:
+  - cleartext: "groups execution"
+    process_name: groups
+    process_args: "groups /etc/group"
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

@@ -1,0 +1,21 @@
+name: sigma_iptables_flush_ufw
+mode: alert
+overlap_allowed_with: [sigma_system_network_discovery]
+eval: |
+  (
+    ((e.process_name == "iptables" || e.process_name == "xtables-legacy-multi" || e.process_name == "iptables-legacy-multi" || e.process_name == "ip6tables" || e.process_name == "ip6tables-legacy-multi")) && ((e.process_args.contains("-F") || e.process_args.contains("-Z") || e.process_args.contains("-X"))) && ((e.process_args.contains("ufw-logging-deny") || e.process_args.contains("ufw-logging-allow") || e.process_args.contains("ufw6-logging-deny") || e.process_args.contains("ufw6-logging-allow")))
+  )
+
+tests:
+  - cleartext: "iptables flush ufw-logging-deny"
+    process_name: iptables
+    process_args: "iptables -F ufw-logging-deny"
+    should_match: true
+  - cleartext: "ip6tables -Z ufw6-logging-allow"
+    process_name: ip6tables
+    process_args: "ip6tables -Z ufw6-logging-allow"
+    should_match: true
+  - cleartext: "normal iptables"
+    process_name: iptables
+    process_args: "iptables -L"
+    should_match: false

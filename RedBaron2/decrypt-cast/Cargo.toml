@@ -1,0 +1,23 @@
+[package]
+name = "decrypt-cast"
+version.workspace = true
+edition.workspace = true
+description = "Decrypt encrypted tty session recordings and cast exports"
+readme = "../README.md"
+keywords = ["edr", "tty", "decryption", "asciicast"]
+categories = ["command-line-utilities", "encoding"]
+
+[dependencies]
+rb2-userspace = { path = "../rb2-userspace" }
+
+age.workspace = true
+base64.workspace = true
+tokio.workspace = true
+lzma-rs.workspace = true
+
+[[bin]]
+name = "decrypt_cast"
+path = "src/main.rs"
+
+[lints.clippy]
+non_ascii_literal = "deny"

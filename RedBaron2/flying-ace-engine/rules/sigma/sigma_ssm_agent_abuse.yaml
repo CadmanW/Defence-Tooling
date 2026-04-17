@@ -1,0 +1,16 @@
+name: sigma_ssm_agent_abuse
+mode: alert
+eval: |
+  (
+    e.process_name == "amazon-ssm-agent" && (e.process_args.contains("-register ") && e.process_args.contains("-code ") && e.process_args.contains("-id ") && e.process_args.contains("-region "))
+  )
+
+tests:
+  - cleartext: "amazon-ssm-agent register with all required flags"
+    process_name: amazon-ssm-agent
+    process_args: "amazon-ssm-agent -register -code ABC123 -id i-1234567890 -region us-east-1"
+    should_match: true
+  - cleartext: "normal amazon-ssm-agent"
+    process_name: amazon-ssm-agent
+    process_args: "amazon-ssm-agent"
+    should_match: false

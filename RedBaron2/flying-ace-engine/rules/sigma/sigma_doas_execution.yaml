@@ -1,0 +1,16 @@
+name: sigma_doas_execution
+mode: alert
+eval: |
+  (
+    e.process_name == "doas"
+  )
+
+tests:
+  - cleartext: "doas execution"
+    process_name: doas
+    process_args: "doas"
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

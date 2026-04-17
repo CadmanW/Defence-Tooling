@@ -1,0 +1,17 @@
+name: sigma_mkfifo_named_pipe_creation
+mode: alert
+overlap_allowed_with: []
+eval: |
+  (
+    e.process_name == "mkfifo"
+  )
+
+tests:
+  - cleartext: "mkfifo execution"
+    process_name: mkfifo
+    process_args: "mkfifo"
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

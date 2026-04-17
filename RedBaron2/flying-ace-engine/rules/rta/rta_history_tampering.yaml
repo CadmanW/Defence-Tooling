@@ -1,0 +1,41 @@
+name: rta_history_tampering
+mode: alert
+eval: |
+  (
+    e.process_name != "sh" &&
+    e.process_name != "bash" &&
+    e.process_name != "history" &&
+    (e.process_args.contains("HIST") || e.process_args.contains("history")) &&
+    (
+      e.process_args.contains("unset HISTFILE") ||
+      e.process_args.contains("HISTFILESIZE=0") ||
+      e.process_args.contains("HISTFILESIZE = 0") ||
+      (e.process_args.contains("history -c") && !e.process_args.contains("update-motd"))
+    )
+  )
+tests:
+  - cleartext: "export HISTFILESIZE=0 from export command"
+    process_name: export
+    process_args: "export HISTFILESIZE=0"
+    should_match: true
+  - cleartext: "python script setting HISTFILESIZE"
+    process_name: python
+    process_args: "python -c 'os.environ[\"HISTFILESIZE\"]=\"0\"'"
+    should_match: false
+  - cleartext: "sh unset HISTFILE (covered by enhanced rule)"
+    process_name: sh
+    process_args: "sh -c unset HISTFILE"
+    should_match: false
+  - cleartext: "bash HISTFILESIZE=0 (covered by enhanced rule)"
+    process_name: bash
+    process_args: "bash -c HISTFILESIZE=0"
+    should_match: false
+  - cleartext: "history -c (covered by enhanced rule)"
+    process_name: history
+    process_args: "history -c"
+    should_match: false
+  - cleartext: "update-motd sets HISTFILE (benign)"
+    process_name: sh
+    process_args: "sh -c HISTFILE=/dev/null && update-motd"
+    process_pname: update-motd-upd
+    should_match: false

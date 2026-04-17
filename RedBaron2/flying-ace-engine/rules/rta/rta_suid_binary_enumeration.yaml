@@ -1,0 +1,34 @@
+name: rta_suid_binary_enumeration
+mode: alert
+overlap_allowed_with: [sigma_susp_find_execution, sigma_susp_recon_indicators]
+eval: |
+  (
+    e.process_name == "find" &&
+    (
+      e.process_args.contains("-perm -4000") ||
+      e.process_args.contains("-perm /4000") ||
+      e.process_args.contains("-perm -2000") ||
+      e.process_args.contains("-perm /u=s")
+    )
+  )
+tests:
+  - cleartext: "find SUID binaries"
+    process_name: find
+    process_args: "find / -perm -4000 -type f 2>/dev/null"
+    should_match: true
+  - cleartext: "find SUID with alternate syntax"
+    process_name: find
+    process_args: "find /usr/bin -perm /4000"
+    should_match: true
+  - cleartext: "find SGID binaries"
+    process_name: find
+    process_args: "find / -perm -2000 -ls"
+    should_match: true
+  - cleartext: "find SUID with symbolic"
+    process_name: find
+    process_args: "find / -perm /u=s"
+    should_match: true
+  - cleartext: "normal find by name"
+    process_name: find
+    process_args: "find /var/log -name '*.log'"
+    should_match: false

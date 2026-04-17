@@ -1,0 +1,20 @@
+name: sigma_systemctl_mask_power_settings
+mode: alert
+eval: |
+  (
+    (e.process_name == "systemctl" && e.process_args.contains(" mask")) && ((e.process_args.contains("suspend.target") || e.process_args.contains("hibernate.target") || e.process_args.contains("hybrid-sleep.target")))
+  )
+
+tests:
+  - cleartext: "systemctl mask suspend.target"
+    process_name: systemctl
+    process_args: "systemctl mask suspend.target"
+    should_match: true
+  - cleartext: "systemctl mask hibernate.target"
+    process_name: systemctl
+    process_args: "systemctl mask hibernate.target"
+    should_match: true
+  - cleartext: "normal systemctl"
+    process_name: systemctl
+    process_args: "systemctl status nginx"
+    should_match: false

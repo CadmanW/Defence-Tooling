@@ -1,0 +1,35 @@
+name: rta_packet_capture
+mode: alert
+eval: |
+  (
+    e.process_name == "tcpdump" ||
+    e.process_name == "tshark" ||
+    e.process_name == "dumpcap" ||
+    e.process_args.contains("pcap") ||
+    (e.process_name == "python3" && e.process_args.contains("scapy"))
+  )
+tests:
+  - cleartext: "tcpdump capture"
+    process_name: tcpdump
+    process_args: "tcpdump -c 5 -nnni em0"
+    should_match: true
+  - cleartext: "tshark capture"
+    process_name: tshark
+    process_args: "tshark -i eth0 -c 10"
+    should_match: true
+  - cleartext: "custom pcap binary from tmp"
+    process_name: t1040_linux_pcapdemo
+    process_args: "/tmp/t1040_linux_pcapdemo -a -f -t 3"
+    should_match: true
+  - cleartext: "dumpcap capture"
+    process_name: dumpcap
+    process_args: "dumpcap -i eth0 -c 100"
+    should_match: true
+  - cleartext: "python scapy sniffing"
+    process_name: python3
+    process_args: "python3 -c from scapy.all import *; sniff(count=10)"
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

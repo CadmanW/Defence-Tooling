@@ -1,0 +1,17 @@
+name: sigma_services_stop_and_disable
+mode: alert
+overlap_allowed_with: []
+eval: |
+  (
+    (e.process_name == "service" || e.process_name == "systemctl" || e.process_name == "chkconfig") && (e.process_args.contains("stop") || e.process_args.contains("disable"))
+  )
+
+tests:
+  - cleartext: "service execution"
+    process_name: service
+    process_args: "service stop"
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

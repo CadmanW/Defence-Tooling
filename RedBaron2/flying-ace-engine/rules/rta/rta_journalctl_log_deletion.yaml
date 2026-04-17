@@ -1,0 +1,32 @@
+name: rta_journalctl_log_deletion
+mode: alert
+eval: |
+  (
+    e.process_name == "journalctl" &&
+    (
+      e.process_args.contains("--vacuum-time") ||
+      e.process_args.contains("--vacuum-size") ||
+      e.process_args.contains("--rotate")
+    )
+  )
+tests:
+  - cleartext: "journalctl vacuum time"
+    process_name: journalctl
+    process_args: "journalctl --vacuum-time=1d"
+    should_match: true
+  - cleartext: "journalctl vacuum size"
+    process_name: journalctl
+    process_args: "journalctl --vacuum-size=100M"
+    should_match: true
+  - cleartext: "journalctl rotate and vacuum"
+    process_name: journalctl
+    process_args: "journalctl --rotate --vacuum-time=0"
+    should_match: true
+  - cleartext: "normal journalctl viewing"
+    process_name: journalctl
+    process_args: "journalctl -u nginx"
+    should_match: false
+  - cleartext: "journalctl follow logs"
+    process_name: journalctl
+    process_args: "journalctl -f"
+    should_match: false

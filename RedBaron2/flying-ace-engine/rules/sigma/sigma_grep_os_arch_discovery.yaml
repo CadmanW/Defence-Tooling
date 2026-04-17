@@ -1,0 +1,20 @@
+name: sigma_grep_os_arch_discovery
+mode: alert
+eval: |
+  (
+    (e.process_name == "grep") && ((e.process_args.ends_with("aarch64") || e.process_args.ends_with("arm") || e.process_args.ends_with("i386") || e.process_args.ends_with("i686") || e.process_args.ends_with("mips") || e.process_args.ends_with("x86_64")))
+  )
+
+tests:
+  - cleartext: "grep for x86_64 arch"
+    process_name: grep
+    process_args: "grep -E x86_64"
+    should_match: true
+  - cleartext: "grep ending with arm"
+    process_name: grep
+    process_args: "grep arm"
+    should_match: true
+  - cleartext: "normal grep"
+    process_name: grep
+    process_args: "grep error /var/log/syslog"
+    should_match: false

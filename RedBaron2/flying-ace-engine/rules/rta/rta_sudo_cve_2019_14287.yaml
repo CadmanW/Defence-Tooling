@@ -1,0 +1,33 @@
+name: rta_sudo_cve_2019_14287
+mode: alert
+eval: |
+  (
+    e.process_name == "sudo" &&
+    (
+      e.process_args.contains("sudo -u#-1") ||
+      e.process_args.contains("sudo -u#4294967295") ||
+      e.process_args.contains("sudo --user=#-1") ||
+      e.process_args.contains("sudo --user=#4294967295")
+    )
+  )
+tests:
+  - cleartext: "sudo CVE-2019-14287 with -u#-1"
+    process_name: sudo
+    process_args: "sudo -u#-1 /bin/bash"
+    should_match: true
+  - cleartext: "sudo CVE-2019-14287 with unsigned int overflow"
+    process_name: sudo
+    process_args: "sudo -u#4294967295 /bin/sh"
+    should_match: true
+  - cleartext: "sudo with --user=#-1"
+    process_name: sudo
+    process_args: "sudo --user=#-1 id"
+    should_match: true
+  - cleartext: "normal sudo as root"
+    process_name: sudo
+    process_args: "sudo apt-get update"
+    should_match: false
+  - cleartext: "sudo as specific user"
+    process_name: sudo
+    process_args: "sudo -u postgres psql"
+    should_match: false

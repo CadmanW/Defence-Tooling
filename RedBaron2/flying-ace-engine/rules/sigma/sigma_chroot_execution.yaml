@@ -1,0 +1,16 @@
+name: sigma_chroot_execution
+mode: alert
+eval: |
+  (
+    e.process_name == "sudo" && (e.process_args.contains(" --chroot ") || e.process_args.contains("sudo -R "))
+  )
+
+tests:
+  - cleartext: "sudo execution"
+    process_name: sudo
+    process_args: "sudo  --chroot "
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

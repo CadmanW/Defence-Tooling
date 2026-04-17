@@ -1,0 +1,17 @@
+name: sigma_bash_interactive_shell
+mode: alert
+overlap_allowed_with: []
+eval: |
+  (
+    e.process_name == "bash" && e.process_args.contains(" -i ")
+  )
+
+tests:
+  - cleartext: "bash execution"
+    process_name: bash
+    process_args: "bash  -i "
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

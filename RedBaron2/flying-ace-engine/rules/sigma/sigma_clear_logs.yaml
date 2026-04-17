@@ -1,0 +1,17 @@
+name: sigma_clear_logs
+mode: alert
+overlap_allowed_with: [sigma_file_deletion]
+eval: |
+  (
+    (e.process_name == "rm" || e.process_name == "shred" || e.process_name == "unlink") && (e.process_args.contains("/var/log") || e.process_args.contains("/var/spool/mail"))
+  )
+
+tests:
+  - cleartext: "rm execution"
+    process_name: rm
+    process_args: "rm /var/log"
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

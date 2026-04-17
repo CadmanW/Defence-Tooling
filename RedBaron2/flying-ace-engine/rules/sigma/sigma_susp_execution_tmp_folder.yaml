@@ -1,0 +1,24 @@
+name: sigma_susp_execution_tmp_folder
+mode: alert
+overlap_allowed_with: []
+eval: |
+  (
+    (e.process_executable.starts_with("/tmp/")) && (!((e.process_name == "nextcloud")))
+  )
+
+tests:
+  - cleartext: "execution from /tmp"
+    process_name: malware
+    process_executable: "/tmp/malware"
+    process_args: "/tmp/malware --payload"
+    should_match: true
+  - cleartext: "nextcloud from /tmp (whitelisted)"
+    process_name: nextcloud
+    process_executable: "/tmp/nextcloud"
+    process_args: "nextcloud"
+    should_match: false
+  - cleartext: "normal execution"
+    process_name: ls
+    process_executable: "/usr/bin/ls"
+    process_args: "ls -la"
+    should_match: false

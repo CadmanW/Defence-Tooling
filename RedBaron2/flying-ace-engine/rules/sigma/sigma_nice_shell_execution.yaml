@@ -1,0 +1,20 @@
+name: sigma_nice_shell_execution
+mode: alert
+eval: |
+  (
+    e.process_name == "nice" && (e.process_args.ends_with("/bin/bash") || e.process_args.ends_with("/bin/dash") || e.process_args.ends_with("/bin/fish") || e.process_args.ends_with("/bin/sh") || e.process_args.ends_with("/bin/zsh"))
+  )
+
+tests:
+  - cleartext: "nice with shell ending in /bin/bash"
+    process_name: nice
+    process_args: "nice -n 10 /bin/bash"
+    should_match: true
+  - cleartext: "nice ending with /bin/sh"
+    process_name: nice
+    process_args: "nice /bin/sh"
+    should_match: true
+  - cleartext: "normal nice"
+    process_name: nice
+    process_args: "nice -n 5 tar czf backup.tar.gz /data"
+    should_match: false

@@ -1,0 +1,49 @@
+name: elastic_pkexec_priv_esc
+mode: alert
+eval: |
+  (
+    e.process_name == "pkexec" &&
+    (
+      e.process_args.contains("SHELL") ||
+      e.process_args.contains("GCONV") ||
+      e.process_args.contains("PATH=") ||
+      e.process_args.contains("LD_") ||
+      e.user_id == 4294967295
+    )
+  )
+tests:
+  - cleartext: "pkexec with SHELL exploit"
+    process_name: pkexec
+    process_args: "pkexec SHELL=/tmp/evil.so"
+    user_id: 1000
+    should_match: true
+  - cleartext: "pkexec GCONV_PATH exploit"
+    process_name: pkexec
+    process_args: "pkexec GCONV_PATH=/tmp"
+    user_id: 1000
+    should_match: true
+  - cleartext: "pkexec LD_PRELOAD"
+    process_name: pkexec
+    process_args: "pkexec LD_PRELOAD=/tmp/rootkit.so /bin/bash"
+    user_id: 1000
+    should_match: true
+  - cleartext: "pkexec with UID_MAX exploit (PwnKit)"
+    process_name: pkexec
+    process_args: "pkexec /bin/bash"
+    user_id: 4294967295
+    should_match: true
+  - cleartext: "pkexec PATH manipulation"
+    process_name: pkexec
+    process_args: "pkexec PATH=/tmp:/usr/bin whoami"
+    user_id: 1000
+    should_match: true
+  - cleartext: "normal pkexec usage"
+    process_name: pkexec
+    process_args: "pkexec /usr/bin/apt update"
+    user_id: 1000
+    should_match: false
+  - cleartext: "pkexec as root"
+    process_name: pkexec
+    process_args: "pkexec systemctl restart nginx"
+    user_id: 0
+    should_match: false

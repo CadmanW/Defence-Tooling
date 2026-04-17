@@ -1,0 +1,20 @@
+name: exec_from_tmp
+mode: alert
+eval: |
+  (
+    e.process_executable.starts_with("/tmp/") &&
+    !re_match(e.process_name, "^(linpeas|winpeas|linenum|linux-exploit-suggester|pspy)")
+  )
+tests:
+  - cleartext: "/tmp/evil.bin (exec from /tmp)"
+    process_name: malware
+    process_executable: "/tmp/evil.bin"
+    should_match: true
+  - cleartext: "/tmp/linpeas.sh (covered by linux_hack_tool)"
+    process_name: linpeas
+    process_executable: "/tmp/linpeas.sh"
+    should_match: false
+  - cleartext: "/usr/bin/ls (normal path)"
+    process_name: ls
+    process_executable: "/usr/bin/ls"
+    should_match: false

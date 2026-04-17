@@ -1,0 +1,34 @@
+name: rta_capabilities_abuse
+mode: alert
+eval: |
+  (
+    e.process_name == "setcap" &&
+    (
+      re_match(e.process_args, "cap_setuid\\+ep") ||
+      re_match(e.process_args, "cap_setgid\\+ep") ||
+      re_match(e.process_args, "cap_dac_override\\+ep") ||
+      re_match(e.process_args, "cap_sys_admin\\+ep") ||
+      re_match(e.process_args, "=ep")
+    )
+  )
+tests:
+  - cleartext: "setcap cap_setuid on python"
+    process_name: setcap
+    process_args: "setcap cap_setuid+ep /usr/bin/python3"
+    should_match: true
+  - cleartext: "setcap cap_setgid abuse"
+    process_name: setcap
+    process_args: "setcap cap_setgid+ep /usr/bin/perl"
+    should_match: true
+  - cleartext: "setcap all capabilities"
+    process_name: setcap
+    process_args: "setcap =ep /tmp/exploit"
+    should_match: true
+  - cleartext: "setcap cap_sys_admin"
+    process_name: setcap
+    process_args: "setcap cap_sys_admin+ep /usr/bin/gdb"
+    should_match: true
+  - cleartext: "setcap cap_net_bind_service (safe)"
+    process_name: setcap
+    process_args: "setcap cap_net_bind_service+ep /usr/bin/node"
+    should_match: false

@@ -1,0 +1,21 @@
+name: sigma_susp_shell_script_exec_from_susp_location
+mode: alert
+overlap_allowed_with: []
+eval: |
+  (
+    ((e.process_name == "bash" || e.process_name == "csh" || e.process_name == "dash" || e.process_name == "fish" || e.process_name == "ksh" || e.process_name == "sh" || e.process_name == "zsh")) && (e.process_args.contains(" -c ")) && (e.process_args.contains("/tmp/"))
+  )
+
+tests:
+  - cleartext: "bash -c with /tmp/ path"
+    process_name: bash
+    process_args: "bash -c /tmp/malicious.sh"
+    should_match: true
+  - cleartext: "sh -c with /tmp/ in args"
+    process_name: sh
+    process_args: "sh -c 'cat /tmp/data.txt'"
+    should_match: true
+  - cleartext: "normal sh"
+    process_name: sh
+    process_args: "/usr/local/bin/script.sh"
+    should_match: false

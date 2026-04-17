@@ -1,0 +1,17 @@
+name: sigma_esxcli_system_discovery
+mode: alert
+overlap_allowed_with: []
+eval: |
+  (
+    (e.process_name == "esxcli" && e.process_args.contains("system")) && ((e.process_args.contains(" get") || e.process_args.contains(" list")))
+  )
+
+tests:
+  - cleartext: "esxcli system info"
+    process_name: esxcli
+    process_args: "esxcli system version get"
+    should_match: true
+  - cleartext: "normal ls"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

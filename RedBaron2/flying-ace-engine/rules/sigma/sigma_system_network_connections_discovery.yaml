@@ -1,0 +1,16 @@
+name: sigma_system_network_connections_discovery
+mode: alert
+eval: |
+  (
+    ((e.process_name == "who" || e.process_name == "w" || e.process_name == "last" || e.process_name == "lsof" || e.process_name == "netstat")) && (!((false /* ParentCommandLine not available in Rhai API */ && e.process_name == "who")))
+  )
+
+tests:
+  - cleartext: "who execution"
+    process_name: who
+    process_args: "who"
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

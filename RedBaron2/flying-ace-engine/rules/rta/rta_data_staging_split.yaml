@@ -1,0 +1,17 @@
+name: rta_data_staging_split
+mode: alert
+eval: |
+  (
+    e.process_name == "split" &&
+    re_match(e.process_args, "-b\\s+[0-9]+") &&
+    re_match(e.process_args, "(T1030_urandom|T1030_\\w+)")
+  )
+tests:
+  - cleartext: "split for data staging"
+    process_name: split
+    process_args: "split -b 5000000 T1030_urandom"
+    should_match: true
+  - cleartext: "normal split command"
+    process_name: split
+    process_args: "split -l 10 file.txt"
+    should_match: false

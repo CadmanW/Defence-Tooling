@@ -1,0 +1,16 @@
+name: sigma_security_software_discovery
+mode: alert
+eval: |
+  (
+    (e.process_name == "grep" || e.process_name == "egrep") && (e.process_args.contains("nessusd") || e.process_args.contains("td-agent") || e.process_args.contains("packetbeat") || e.process_args.contains("filebeat") || e.process_args.contains("auditbeat") || e.process_args.contains("osqueryd") || e.process_args.contains("cbagentd") || e.process_args.contains("falcond"))
+  )
+
+tests:
+  - cleartext: "grep execution"
+    process_name: grep
+    process_args: "grep nessusd"
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

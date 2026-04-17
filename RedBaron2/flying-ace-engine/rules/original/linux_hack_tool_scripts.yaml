@@ -1,0 +1,32 @@
+name: linux_hack_tool_scripts
+mode: alert
+overlap_allowed_with: [sigma_susp_execution_tmp_folder, sigma_susp_hktl_execution]
+eval: |
+  (
+    e.process_name.starts_with("linpeas") ||
+    e.process_name.starts_with("winpeas") ||
+    e.process_name.starts_with("linenum") ||
+    e.process_name.starts_with("linux-exploit-suggester") ||
+    e.process_name.starts_with("pspy") ||
+    e.process_executable.contains("linpeas") ||
+    e.process_executable.contains("winpeas") ||
+    e.process_executable.contains("linenum") ||
+    e.process_executable.contains("linux-exploit-suggester") ||
+    e.process_executable.contains("pspy")
+  )
+tests:
+  - cleartext: "./linpeas.sh"
+    process_name: linpeas
+    process_args: "linpeas.sh"
+    process_executable: "/tmp/linpeas.sh"
+    should_match: true
+  - cleartext: "linux-exploit-suggester script path"
+    process_name: linux-exploit-suggester
+    process_args: "/opt/redteam/linux-exploit-suggester.py"
+    process_executable: "/opt/redteam/linux-exploit-suggester.py"
+    should_match: true
+  - cleartext: "lesspipe (standard less helper, not a hack tool)"
+    process_name: lesspipe
+    process_args: "lesspipe"
+    process_executable: "/usr/bin/dash"
+    should_match: false

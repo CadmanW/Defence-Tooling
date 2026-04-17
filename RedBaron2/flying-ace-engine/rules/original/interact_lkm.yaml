@@ -1,0 +1,25 @@
+name: interact_lkm
+mode: alert
+overlap_allowed_with: [elastic_kernel_module_load]
+eval: |
+  (
+    e.process_name == "insmod" ||
+    e.process_name == "modprobe"
+  )
+tests:
+  - cleartext: "insmod /path/to/rootkit.ko"
+    process_name: "insmod"
+    process_args: "insmod /path/to/rootkit.ko"
+    should_match: true
+  - cleartext: "modprobe nf_conntrack"
+    process_name: "modprobe"
+    process_args: "modprobe nf_conntrack"
+    should_match: true
+  - cleartext: "modprobe -r usbcore"
+    process_name: "modprobe"
+    process_args: "modprobe -r usbcore"
+    should_match: true
+  - cleartext: "ls -la /lib/modules"
+    process_name: "ls"
+    process_args: "ls -la /lib/modules"
+    should_match: false

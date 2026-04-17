@@ -1,0 +1,17 @@
+name: sigma_susp_curl_fileupload
+mode: alert
+overlap_allowed_with: [sigma_curl_usage]
+eval: |
+  (
+    ((e.process_name == "curl") && (((e.process_args.contains(" --form") || e.process_args.contains(" --upload-file ") || e.process_args.contains(" --data ") || e.process_args.contains(" --data-")) || re_match(e.process_args, "\\s-[FTd]\\s")))) && (!(((e.process_args.contains("://localhost") || e.process_args.contains("://127.0.0.1")))))
+  )
+
+tests:
+  - cleartext: "curl execution"
+    process_name: curl
+    process_args: "curl  --form"
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

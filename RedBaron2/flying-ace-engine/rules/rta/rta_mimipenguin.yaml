@@ -1,0 +1,17 @@
+name: rta_mimipenguin
+mode: alert
+eval: |
+  (
+    e.process_executable.contains("mimipenguin") ||
+    e.process_args.contains("mimipenguin") ||
+    e.process_name.contains("mimipenguin")
+  )
+tests:
+  - cleartext: "mimipenguin credential dump"
+    process_name: cat
+    process_args: "/tmp/mimipenguin/mimipenguin_2.0-release/mimipenguin.sh"
+    should_match: true
+  - cleartext: "mimipenguin via sh"
+    process_name: sh
+    process_args: "sh /tmp/mimipenguin/mimipenguin_2.0-release/mimipenguin.sh"
+    should_match: true

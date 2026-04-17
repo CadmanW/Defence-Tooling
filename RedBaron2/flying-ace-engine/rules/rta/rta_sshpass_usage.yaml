@@ -1,0 +1,13 @@
+name: rta_sshpass_usage
+mode: alert
+eval: |
+  e.process_name == "sshpass"
+tests:
+  - cleartext: "sshpass with password argument"
+    process_name: sshpass
+    process_args: "sshpass -p 'pwd101!' ssh testuser1@localhost -T hostname"
+    should_match: true
+  - cleartext: "sshpass -e with environment variable"
+    process_name: sshpass
+    process_args: "sshpass -e SSHPASS testuser1@localhost hostname"
+    should_match: true

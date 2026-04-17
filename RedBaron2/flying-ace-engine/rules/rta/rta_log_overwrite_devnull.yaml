@@ -1,0 +1,34 @@
+name: rta_log_overwrite_devnull
+mode: alert
+overlap_allowed_with: [rta_binary_masquerade]
+eval: |
+  (
+    (e.process_name == "cat" || e.process_name == "cp" || e.process_name == "dd") &&
+    e.process_args.contains("/dev/null") &&
+    (
+      re_match(e.process_args, ">\\s*/var/log/") ||
+      e.process_args.contains("of=/var/log/") ||
+      e.process_args.contains("/var/audit/")
+    )
+  )
+tests:
+  - cleartext: "cat /dev/null overwrite auth.log"
+    process_name: cat
+    process_args: "cat /dev/null > /var/log/auth.log"
+    should_match: true
+  - cleartext: "dd /dev/null to syslog"
+    process_name: dd
+    process_args: "dd if=/dev/null of=/var/log/syslog"
+    should_match: true
+  - cleartext: "cp /dev/null to audit log"
+    process_name: cp
+    process_args: "cp /dev/null /var/audit/audit.log"
+    should_match: true
+  - cleartext: "cat /dev/null to secure log"
+    process_name: cat
+    process_args: "cat /dev/null > /var/log/secure"
+    should_match: true
+  - cleartext: "normal cat to temp file"
+    process_name: cat
+    process_args: "cat /dev/null > /tmp/empty.txt"
+    should_match: false

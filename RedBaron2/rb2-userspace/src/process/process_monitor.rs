@@ -1,0 +1,493 @@
+use crate::{config::yaml, process::helper, process::pipeline};
+use aya::maps::AsyncPerfEventArray;
+use aya::programs::TracePoint;
+use aya::util::online_cpus;
+use aya::{Btf, EbpfLoader, Endianness, Pod};
+use bytes::BytesMut;
+use chrono::{SecondsFormat, TimeZone};
+use flying_ace_engine::ProcessEvent as EngineEvent;
+use log::{debug, error, info, warn};
+use std::mem::{MaybeUninit, size_of};
+use std::sync::OnceLock;
+use std::{convert::Infallible, path::Path};
+use std::{fs, io};
+use tokio::sync::mpsc;
+
+// Mirror the C headers exactly
+const TASK_COMM_LEN: usize = 16;
+const MAX_ARGS: usize = 32;
+const ARGS_BUF_SIZE: usize = 512;
+const MAX_PATH_COMPONENT_SIZE: usize = 32;
+const MAX_PATH_COMPONENTS: usize = 8;
+
+static BTIME: OnceLock<u64> = OnceLock::new();
+
+/// get time in unix epoch seconds since last boot
+/// OnceLock fails over to 0 with a warning message
+fn get_btime() -> &'static u64 {
+    BTIME.get_or_init(|| match stat_btime() {
+        Ok(t) => t,
+        Err(e) => {
+            warn!(
+                "Unable to get btime, process_monitor time will be wrong: {}",
+                e
+            );
+            0
+        }
+    })
+}
+
+/// get btime from /proc/stat
+fn stat_btime() -> io::Result<u64> {
+    let stat = fs::read_to_string("/proc/stat")?;
+
+    for line in stat.lines() {
+        if let Some(rest) = line.strip_prefix("btime ") {
+            // btime is seconds since Unix epoch
+            let v = rest
+                .trim()
+                .parse::<u64>()
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+            return Ok(v);
+        }
+    }
+
+    Err(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        "btime not found in /proc/stat",
+    ))
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct Args {
+    argc: u32,
+    used: u32,
+    off: [u16; MAX_ARGS],
+    len: [u16; MAX_ARGS],
+    buf: [u8; ARGS_BUF_SIZE],
+}
+unsafe impl Pod for Args {}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct ProcessEvent {
+    timestamp: u64, // ns since boot
+    ret: i64,
+
+    pid: u32,
+    ppid: u32,
+    uid: u32,
+    sid: u32,
+
+    audit_loginuid: u32,
+    audit_sessionid: u32,
+
+    name: [u8; TASK_COMM_LEN],
+    pname: [u8; TASK_COMM_LEN],
+
+    argv: Args,
+    executable: [[u8; MAX_PATH_COMPONENT_SIZE]; MAX_PATH_COMPONENTS], // basename-first order
+    working_directory: [[u8; MAX_PATH_COMPONENT_SIZE]; MAX_PATH_COMPONENTS],
+}
+unsafe impl Pod for ProcessEvent {}
+
+fn nul_terminated_to_string(buf: &[u8]) -> String {
+    let len = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+    let s = &buf[..len];
+    String::from_utf8_lossy(s).into_owned()
+}
+
+fn decode_comm(name: &[u8; TASK_COMM_LEN]) -> String {
+    nul_terminated_to_string(name)
+}
+
+fn decode_argv(argv: &Args) -> Vec<String> {
+    let argc = (argv.argc as usize).min(MAX_ARGS);
+    let used = (argv.used as usize).min(ARGS_BUF_SIZE);
+
+    (0..argc)
+        .filter_map(|i| {
+            let off = argv.off[i] as usize;
+            let len = argv.len[i] as usize;
+
+            if off >= used || len == 0 || off + len > used {
+                return None;
+            }
+
+            let slice = &argv.buf[off..off + len];
+            Some(nul_terminated_to_string(slice))
+        })
+        .collect()
+}
+
+fn decode_path(components: &[[u8; MAX_PATH_COMPONENT_SIZE]; MAX_PATH_COMPONENTS]) -> String {
+    // eBPF fills basename-first as it walks dentry->parent, so reverse non-empty parts
+    let mut out = String::new();
+    for component in components.iter().rev() {
+        let part = nul_terminated_to_string(component);
+        if part.is_empty() {
+            continue;
+        }
+        out.push('/');
+        out.push_str(&part);
+    }
+    out
+}
+
+fn component_is_full(component: &[u8; MAX_PATH_COMPONENT_SIZE]) -> bool {
+    !component.contains(&0)
+}
+
+fn path_may_be_truncated(
+    components: &[[u8; MAX_PATH_COMPONENT_SIZE]; MAX_PATH_COMPONENTS],
+) -> bool {
+    let mut saw_empty = false;
+    let mut used_components = 0usize;
+
+    for component in components {
+        let empty = component[0] == 0;
+        if empty {
+            saw_empty = true;
+            continue;
+        }
+
+        used_components += 1;
+        if saw_empty || component_is_full(component) {
+            return true;
+        }
+    }
+
+    used_components == MAX_PATH_COMPONENTS
+}
+
+fn argv_may_be_truncated(argv: &Args) -> bool {
+    if argv.argc as usize > MAX_ARGS || argv.used as usize >= ARGS_BUF_SIZE {
+        return true;
+    }
+
+    let argc = (argv.argc as usize).min(MAX_ARGS);
+    let used = (argv.used as usize).min(ARGS_BUF_SIZE);
+
+    (0..argc).any(|i| {
+        let off = argv.off[i] as usize;
+        let len = argv.len[i] as usize;
+        if off >= used || len == 0 || off + len > used {
+            return true;
+        }
+
+        !argv.buf[off..off + len].contains(&0)
+    })
+}
+
+pub async fn run<P: AsRef<Path>>(
+    btf_file_path: P,
+    cfg: yaml::ProcessConfig,
+) -> anyhow::Result<Infallible> {
+    let mut ebpf = EbpfLoader::new()
+        .btf(
+            Btf::parse_file(btf_file_path.as_ref(), Endianness::default())
+                .ok()
+                .as_ref(),
+        )
+        .load(aya::include_bytes_aligned!(concat!(
+            env!("OUT_DIR"),
+            "/process_start.bpf.o"
+        )))?;
+
+    let prog: &mut TracePoint = ebpf.program_mut("trace_exec_enter").unwrap().try_into()?;
+    prog.load()?;
+    prog.attach("syscalls", "sys_enter_execve")?;
+
+    let prog: &mut TracePoint = ebpf
+        .program_mut("trace_execveat_enter")
+        .unwrap()
+        .try_into()?;
+    prog.load()?;
+    prog.attach("syscalls", "sys_enter_execveat")?;
+
+    let prog: &mut TracePoint = ebpf.program_mut("trace_exec_exit").unwrap().try_into()?;
+    prog.load()?;
+    prog.attach("syscalls", "sys_exit_execve")?;
+
+    let prog: &mut TracePoint = ebpf
+        .program_mut("trace_execveat_exit")
+        .unwrap()
+        .try_into()?;
+    prog.load()?;
+    prog.attach("syscalls", "sys_exit_execveat")?;
+
+    let events_map = ebpf.take_map("events").ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::NotFound, "events perf array not found")
+    })?;
+
+    let mut perf = AsyncPerfEventArray::try_from(events_map)?;
+
+    let engine = pipeline::init_rhai_engine(&cfg);
+    let scorer = if cfg.ml_enabled {
+        Some(rb2_ml::OnlineScorer::new(rb2_ml::Config::default()))
+    } else {
+        None
+    };
+
+    let (tx, rx) = mpsc::channel(128);
+
+    for cpu_id in online_cpus().map_err(|(_, e)| e)? {
+        let mut buf = perf.open(cpu_id, None)?;
+        let tx = tx.clone();
+        tokio::spawn(async move {
+            // Multiple scratch buffers per read to batch events.
+            let mut bufs: Vec<BytesMut> = (0..16).map(|_| BytesMut::with_capacity(1024)).collect();
+
+            loop {
+                let batch = match buf.read_events(&mut bufs).await {
+                    Ok(b) => b,
+                    Err(err) => {
+                        error!("perf read error on cpu {}: {}", cpu_id, err);
+                        continue;
+                    }
+                };
+
+                for rec in bufs.iter_mut().take(batch.read) {
+                    let ev = match parse_event(rec) {
+                        Some(ev) => ev,
+                        None => {
+                            warn!("failed to parse perf record on cpu {}", cpu_id);
+                            rec.clear();
+                            continue;
+                        }
+                    };
+
+                    debug!("perf process_event pid={}", ev.pid);
+
+                    if tx.send(convert_event(&ev)).await.is_err() {
+                        error!(
+                            "process monitor event receiver dropped; stopping event recording on cpu {}",
+                            cpu_id
+                        );
+                        return;
+                    }
+
+                    rec.clear();
+                }
+            }
+        });
+    }
+    drop(tx);
+
+    info!("Setup process monitor, listening for process create events");
+
+    Ok(pipeline::run_event_pipeline(engine, scorer, cfg.ml_debug, rx).await)
+}
+
+fn parse_event(buf: &[u8]) -> Option<ProcessEvent> {
+    let need = size_of::<ProcessEvent>();
+    if buf.len() < need {
+        warn!("perf record too small: got {}, need {}", buf.len(), need);
+        return None;
+    }
+
+    let mut uninit = MaybeUninit::<ProcessEvent>::uninit();
+    unsafe {
+        let dst = uninit.as_mut_ptr() as *mut u8;
+        std::ptr::copy_nonoverlapping(buf.as_ptr(), dst, need);
+        Some(uninit.assume_init())
+    }
+}
+
+fn convert_event(e: &ProcessEvent) -> EngineEvent {
+    // ebpf-based info
+    let comm = decode_comm(&e.name);
+    let ebpf_exe = decode_path(&e.executable);
+    let ebpf_cwd = decode_path(&e.working_directory);
+    let ebpf_argv = decode_argv(&e.argv);
+    let ebpf_argv_joined = {
+        let s = ebpf_argv.join(" ");
+        if s.is_empty() { None } else { Some(s) }
+    };
+    let pcomm = decode_comm(&e.pname);
+
+    let host_name = helper::get_hostname();
+    let user_name = helper::get_username(e.uid);
+
+    let proc_exe = if ebpf_exe.is_empty() || path_may_be_truncated(&e.executable) {
+        helper::get_proc_exe(e.pid)
+    } else {
+        None
+    };
+    let proc_cwd = if ebpf_cwd.is_empty() || path_may_be_truncated(&e.working_directory) {
+        helper::get_proc_cwd(e.pid)
+    } else {
+        None
+    };
+    let proc_argv = if ebpf_argv.is_empty() || argv_may_be_truncated(&e.argv) {
+        helper::get_proc_argv(e.pid)
+    } else {
+        None
+    };
+
+    /*
+     * Decode if the proc data is good enough to expand on the ebpf data
+     * This is because the ebpf bytes read are limited.
+     */
+
+    // Decide final args
+    let process_args = match (&proc_argv, &ebpf_argv) {
+        (Some(proc_argv), ebpf_argv) if helper::argv_prefixes_match(proc_argv, ebpf_argv) => {
+            let joined = proc_argv.join(" ");
+            if joined.is_empty() {
+                ebpf_argv_joined
+            } else {
+                Some(joined)
+            }
+        }
+        _ => ebpf_argv_joined,
+    };
+    // Decide final executable path
+    let process_executable = match (&proc_exe, &ebpf_exe) {
+        (Some(proc_exe), ebpf) if helper::path_tail_matches(proc_exe, ebpf) || ebpf.is_empty() => {
+            Some(proc_exe.clone())
+        }
+        _ => {
+            if ebpf_exe.is_empty() {
+                None
+            } else {
+                Some(ebpf_exe.clone())
+            }
+        }
+    };
+    // Decide final working directory
+    let process_working_directory = match (&proc_cwd, &ebpf_cwd) {
+        (Some(proc_cwd), ebpf) if helper::path_tail_matches(proc_cwd, ebpf) || ebpf.is_empty() => {
+            Some(proc_cwd.clone())
+        }
+        _ => {
+            if ebpf_cwd.is_empty() {
+                None
+            } else {
+                Some(ebpf_cwd.clone())
+            }
+        }
+    };
+
+    // convert nanoseconds to ISO8601 timestamp
+    let timestamp = chrono::Local
+        .timestamp_opt(
+            (e.timestamp / 1_000_000_000 + get_btime()) as i64,
+            (e.timestamp % 1_000_000_000) as u32,
+        )
+        .single()
+        .map(|ts| ts.to_rfc3339_opts(SecondsFormat::Millis, true))
+        .unwrap_or_else(|| "unknown".to_string());
+
+    EngineEvent {
+        timestamp,
+
+        // process.*
+        process_name: comm,
+        process_pid: e.pid,
+        process_sid: e.sid,
+        process_args,
+        process_executable,
+        process_ppid: Some(e.ppid),
+        process_pname: Some(pcomm),
+        process_working_directory,
+
+        audit_loginuid: e.audit_loginuid,
+        audit_sessionid: e.audit_sessionid,
+
+        // user.*
+        user_name,
+        user_id: Some(e.uid),
+
+        // event.*
+        event_category: "process-started".to_string(),
+        event_module: Some("ebpf".to_string()),
+        status: Some(helper::exec_status(e.ret)),
+        ecs_version: "1.0.0".to_string(),
+
+        // host.*
+        host_name,
+        host_id: helper::get_machine_id(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_nul_terminated_to_string() {
+        let mut buf = [0u8; 8];
+        buf[..4].copy_from_slice(b"bash");
+        assert_eq!(nul_terminated_to_string(&buf), "bash");
+
+        let buf = b"no-nul".to_vec();
+        assert_eq!(nul_terminated_to_string(&buf), "no-nul");
+    }
+
+    #[test]
+    fn test_decode_path_reverses() {
+        let mut comps = [[0u8; MAX_PATH_COMPONENT_SIZE]; MAX_PATH_COMPONENTS];
+        // simulate ebpf basename-first
+        comps[0][..3].copy_from_slice(b"bin");
+        comps[1][..3].copy_from_slice(b"usr");
+        // Empty remainder should be ignored
+        println!("{}", decode_path(&comps));
+        assert_eq!(decode_path(&comps), "/usr/bin");
+    }
+
+    #[test]
+    fn test_decode_argv_1() {
+        // Build a packed Args that represents: ["bash", "-c", "echo hi"]
+        let mut argv = Args {
+            argc: 0,
+            used: 0,
+            off: [0u16; MAX_ARGS],
+            len: [0u16; MAX_ARGS],
+            buf: [0u8; ARGS_BUF_SIZE],
+        };
+
+        let items: [&[u8]; 3] = [b"bash\0", b"-c\0", b"echo hi\0"];
+        let mut cursor: usize = 0;
+
+        for (i, s) in items.iter().enumerate() {
+            let l = s.len();
+            assert!(cursor + l <= ARGS_BUF_SIZE);
+
+            argv.off[i] = cursor as u16;
+            argv.len[i] = l as u16;
+            argv.buf[cursor..cursor + l].copy_from_slice(s);
+
+            cursor += l;
+            argv.argc += 1;
+            argv.used = cursor as u32;
+        }
+
+        let decoded = decode_argv(&argv);
+        assert_eq!(decoded, vec!["bash", "-c", "echo hi"]);
+    }
+
+    #[test]
+    fn test_decode_argv_2() {
+        let mut argv = Args {
+            argc: 2,
+            used: 6,
+            off: [0u16; MAX_ARGS],
+            len: [0u16; MAX_ARGS],
+            buf: [0u8; ARGS_BUF_SIZE],
+        };
+
+        // arg0 = "bash\0"
+        argv.buf[..5].copy_from_slice(b"bash\0");
+        argv.off[0] = 0;
+        argv.len[0] = 5;
+
+        // arg1 points too far, should be ignored
+        argv.off[1] = 100;
+        argv.len[1] = 4;
+
+        let decoded = decode_argv(&argv);
+        assert_eq!(decoded, vec!["bash"]);
+    }
+}

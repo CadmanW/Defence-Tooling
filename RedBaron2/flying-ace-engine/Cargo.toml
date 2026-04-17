@@ -1,0 +1,28 @@
+[package]
+name = "flying-ace-engine"
+version.workspace = true
+edition.workspace = true
+description = "Rule engine for evaluating rb2 process events"
+readme = "../README.md"
+keywords = ["edr", "rules", "detection", "security"]
+categories = ["parser-implementations"]
+
+[features]
+default = []
+tracing = ["fastrace/enable"]
+
+[dependencies]
+regex.workspace = true
+rhai.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_with.workspace = true
+fastrace.workspace = true
+yaml_serde.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "engine"
+harness = false

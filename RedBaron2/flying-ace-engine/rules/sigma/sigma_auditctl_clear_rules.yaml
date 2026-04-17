@@ -1,0 +1,16 @@
+name: sigma_auditctl_clear_rules
+mode: alert
+eval: |
+  (
+    e.process_name == "auditctl" && e.process_args.contains("-D")
+  )
+
+tests:
+  - cleartext: "auditctl delete all rules"
+    process_name: auditctl
+    process_args: "auditctl -D"
+    should_match: true
+  - cleartext: "auditctl list rules"
+    process_name: auditctl
+    process_args: "auditctl -l"
+    should_match: false

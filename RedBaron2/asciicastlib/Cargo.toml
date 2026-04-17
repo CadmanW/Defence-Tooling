@@ -1,0 +1,12 @@
+[package]
+name = "asciicastlib"
+version = "0.1.0"
+edition.workspace = true
+description = "Library for reading and writing asciicast v3 recordings"
+readme = "../README.md"
+keywords = ["asciinema", "terminal", "recording"]
+categories = ["encoding"]
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true

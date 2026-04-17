@@ -1,0 +1,51 @@
+name: elastic_container_management_binary
+mode: alert
+eval: |
+  (
+    (
+      e.process_name == "docker" ||
+      e.process_name == "dockerd" ||
+      e.process_name == "containerd" ||
+      e.process_name == "runc" ||
+      e.process_name == "ctr" ||
+      e.process_name == "nerdctl" ||
+      e.process_name == "podman"
+    ) &&
+    (
+      e.process_working_directory.starts_with("/var/lib/docker/overlay2/") ||
+      e.process_working_directory.starts_with("/run/containerd/") ||
+      e.process_working_directory.contains("/merged/") ||
+      e.process_working_directory.contains("/upperdir/")
+    )
+  )
+tests:
+  - cleartext: "docker run alpine sh"
+    process_name: docker
+    process_args: "docker run alpine sh"
+    process_working_directory: "/var/lib/docker/overlay2/abc123/merged"
+    should_match: true
+  - cleartext: "runc exec container_id sh"
+    process_name: runc
+    process_args: "runc exec container_id sh"
+    process_working_directory: "/run/containerd/runc/k8s.io/abc123"
+    should_match: true
+  - cleartext: "containerd --config /etc/containerd/config.toml"
+    process_name: containerd
+    process_args: "containerd --config /etc/containerd/config.toml"
+    process_working_directory: "/var/lib/docker/overlay2/def456/upperdir"
+    should_match: true
+  - cleartext: "podman ps"
+    process_name: podman
+    process_args: "podman ps"
+    process_working_directory: "/run/containerd/io.containerd/test/merged"
+    should_match: true
+  - cleartext: "docker ps"
+    process_name: docker
+    process_args: "docker ps"
+    process_working_directory: "/home/user"
+    should_match: false
+  - cleartext: "ls /tmp"
+    process_name: ls
+    process_args: "ls /tmp"
+    process_working_directory: "/var/lib/docker/overlay2/abc/merged"
+    should_match: false

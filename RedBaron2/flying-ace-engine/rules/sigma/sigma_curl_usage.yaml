@@ -1,0 +1,17 @@
+name: sigma_curl_usage
+mode: alert
+overlap_allowed_with: [curl_upload_file_regex, rta_wget_post_exfil, sigma_proxy_connection, sigma_susp_curl_fileupload, sigma_susp_curl_useragent]
+eval: |
+  (
+    e.process_name == "curl"
+  )
+
+tests:
+  - cleartext: "curl execution"
+    process_name: curl
+    process_args: "curl"
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

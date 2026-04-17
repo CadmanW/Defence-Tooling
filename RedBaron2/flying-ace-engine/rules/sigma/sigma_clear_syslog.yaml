@@ -1,0 +1,17 @@
+name: sigma_clear_syslog
+mode: alert
+overlap_allowed_with: [sigma_clear_logs, sigma_file_deletion]
+eval: |
+  (
+    (((e.process_args.contains("/var/log/syslog")) && ((e.process_name == "rm" && (e.process_args.contains(" -r ") || e.process_args.contains(" -f ") || e.process_args.contains(" -rf ") || e.process_args.contains("/var/log/syslog"))) || (e.process_name == "unlink") || (e.process_name == "mv") || (e.process_name == "truncate" && (e.process_args.contains("0 ") && e.process_args.contains("/var/log/syslog")) && (e.process_args.contains("-s ") || e.process_args.contains("-c ") || e.process_args.contains("--size"))) || (e.process_name == "ln" && (e.process_args.contains("/dev/null ") && e.process_args.contains("/var/log/syslog")) && (e.process_args.contains("-sf ") || e.process_args.contains("-sfn ") || e.process_args.contains("-sfT "))) || (e.process_name == "cp" && e.process_args.contains("/dev/null")) || (e.process_name == "shred" && e.process_args.contains("-u "))))) || (((e.process_args.contains(" > /var/log/syslog") || e.process_args.contains(" >/var/log/syslog") || e.process_args.contains(" >| /var/log/syslog") || e.process_args.contains(": > /var/log/syslog") || e.process_args.contains(":> /var/log/syslog") || e.process_args.contains(":>/var/log/syslog") || e.process_args.contains(">|/var/log/syslog"))) || ((e.process_args.contains("journalctl --vacuum") || e.process_args.contains("journalctl --rotate"))))
+  )
+
+tests:
+  - cleartext: "rm execution"
+    process_name: rm
+    process_args: "rm /var/log/syslog"
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

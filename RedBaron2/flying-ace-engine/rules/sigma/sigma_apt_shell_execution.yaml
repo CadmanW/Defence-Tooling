@@ -1,0 +1,16 @@
+name: sigma_apt_shell_execution
+mode: alert
+eval: |
+  (
+    (e.process_name == "apt" || e.process_name == "apt-get") && e.process_args.contains("APT::Update::Pre-Invoke::=")
+  )
+
+tests:
+  - cleartext: "apt execution"
+    process_name: apt
+    process_args: "apt APT::Update::Pre-Invoke::="
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

@@ -1,0 +1,17 @@
+name: sigma_esxcli_storage_discovery
+mode: alert
+overlap_allowed_with: [sigma_esxcli_system_discovery]
+eval: |
+  (
+    (e.process_name == "esxcli" && e.process_args.contains("storage")) && ((e.process_args.contains(" get") || e.process_args.contains(" list")))
+  )
+
+tests:
+  - cleartext: "esxcli storage list"
+    process_name: esxcli
+    process_args: "esxcli storage filesystem list"
+    should_match: true
+  - cleartext: "normal ls"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

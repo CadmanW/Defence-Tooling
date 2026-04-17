@@ -1,0 +1,20 @@
+name: sigma_python_shell_os_system
+mode: alert
+eval: |
+  (
+    (((e.process_name == "python" || e.process_name == "python2" || e.process_name == "python3") || (e.process_executable.contains("/python2.") || e.process_executable.contains("/python3.")))) && ((e.process_args.contains(" -c ") && e.process_args.contains("os.system(")) && (e.process_args.contains("/bin/bash") || e.process_args.contains("/bin/dash") || e.process_args.contains("/bin/fish") || e.process_args.contains("/bin/sh") || e.process_args.contains("/bin/zsh")))
+  )
+
+tests:
+  - cleartext: "python os.system with bash"
+    process_name: python
+    process_args: "python -c 'import os;os.system(\"/bin/bash\")'"
+    should_match: true
+  - cleartext: "python3 os.system with sh"
+    process_name: python3
+    process_args: "/usr/bin/python3.8 -c 'import os;os.system(\"/bin/sh -i\")'"
+    should_match: true
+  - cleartext: "normal python"
+    process_name: python
+    process_args: "python script.py"
+    should_match: false

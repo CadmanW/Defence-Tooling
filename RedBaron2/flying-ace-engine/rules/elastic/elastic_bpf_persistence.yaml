@@ -1,0 +1,39 @@
+name: elastic_bpf_persistence
+mode: alert
+eval: |
+  (
+    e.process_name == "bpftool" &&
+    (
+      (e.process_args.contains("prog") && e.process_args.contains("load")) ||
+      (e.process_args.contains("prog") && e.process_args.contains("pin"))
+    ) &&
+    (
+      e.process_args.contains("/sys/fs/bpf/") ||
+      e.process_args.contains("/sys/kernel/debug/tracing/")
+    )
+  )
+tests:
+  - cleartext: "bpftool prog load rootkit.o /sys/fs/bpf/rootkit"
+    process_name: bpftool
+    process_args: "bpftool prog load rootkit.o /sys/fs/bpf/rootkit"
+    should_match: true
+  - cleartext: "bpftool prog pin id 123 /sys/fs/bpf/backdoor"
+    process_name: bpftool
+    process_args: "bpftool prog pin id 123 /sys/fs/bpf/backdoor"
+    should_match: true
+  - cleartext: "bpftool prog load malware.o /sys/kernel/debug/tracing/kprobe"
+    process_name: bpftool
+    process_args: "bpftool prog load malware.o /sys/kernel/debug/tracing/kprobe"
+    should_match: true
+  - cleartext: "bpftool prog pin id 456 /sys/fs/bpf/persist"
+    process_name: bpftool
+    process_args: "bpftool prog pin id 456 /sys/fs/bpf/persist"
+    should_match: true
+  - cleartext: "bpftool prog show"
+    process_name: bpftool
+    process_args: "bpftool prog show"
+    should_match: false
+  - cleartext: "bpftool prog dump id 123"
+    process_name: bpftool
+    process_args: "bpftool prog dump id 123"
+    should_match: false

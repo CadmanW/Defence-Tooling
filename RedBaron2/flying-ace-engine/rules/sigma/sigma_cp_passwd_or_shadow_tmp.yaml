@@ -1,0 +1,21 @@
+name: sigma_cp_passwd_or_shadow_tmp
+mode: alert
+overlap_allowed_with: [sigma_local_account]
+eval: |
+  (
+    (e.process_name == "cp") && (e.process_args.contains("/tmp/")) && ((e.process_args.contains("passwd") || e.process_args.contains("shadow")))
+  )
+
+tests:
+  - cleartext: "cp passwd to tmp"
+    process_name: cp
+    process_args: "cp /etc/passwd /tmp/passwd.bak"
+    should_match: true
+  - cleartext: "cp shadow to tmp"
+    process_name: cp
+    process_args: "cp /etc/shadow /tmp/.shadow"
+    should_match: true
+  - cleartext: "normal cp"
+    process_name: cp
+    process_args: "cp file.txt /home/user/"
+    should_match: false

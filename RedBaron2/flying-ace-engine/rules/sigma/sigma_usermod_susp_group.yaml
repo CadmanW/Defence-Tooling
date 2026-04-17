@@ -1,0 +1,16 @@
+name: sigma_usermod_susp_group
+mode: alert
+eval: |
+  (
+    e.process_name == "usermod" && (e.process_args.contains("-aG root") || e.process_args.contains("-aG sudoers"))
+  )
+
+tests:
+  - cleartext: "usermod execution"
+    process_name: usermod
+    process_args: "usermod -aG root"
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

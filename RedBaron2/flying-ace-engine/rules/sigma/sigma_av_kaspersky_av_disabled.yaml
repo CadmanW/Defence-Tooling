@@ -1,0 +1,21 @@
+name: sigma_av_kaspersky_av_disabled
+mode: alert
+overlap_allowed_with: [sigma_services_stop_and_disable]
+eval: |
+  (
+    (e.process_name == "systemctl" || e.process_name == "bash" || e.process_name == "sh") && (e.process_args.contains("stop") && e.process_args.contains("kesl"))
+  )
+
+tests:
+  - cleartext: "systemctl stop kesl"
+    process_name: systemctl
+    process_args: "systemctl stop kesl"
+    should_match: true
+  - cleartext: "bash stop kesl"
+    process_name: bash
+    process_args: "bash -c 'stop kesl'"
+    should_match: true
+  - cleartext: "normal ls"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

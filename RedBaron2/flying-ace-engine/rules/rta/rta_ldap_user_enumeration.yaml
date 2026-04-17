@@ -1,0 +1,29 @@
+name: rta_ldap_user_enumeration
+mode: alert
+eval: |
+  (
+    e.process_name == "ldapsearch" &&
+    (
+      e.process_args.contains("objectClass=user") ||
+      e.process_args.contains("objectClass=person") ||
+      e.process_args.contains("objectClass=organizationalPerson") ||
+      e.process_args.contains("CN=Users")
+    )
+  )
+tests:
+  - cleartext: "ldapsearch objectClass=user"
+    process_name: ldapsearch
+    process_args: "ldapsearch -x -H ldap://dc.domain.local -b dc=domain,dc=local (objectClass=user)"
+    should_match: true
+  - cleartext: "ldapsearch for persons"
+    process_name: ldapsearch
+    process_args: "ldapsearch -x -b dc=example,dc=com (objectClass=person)"
+    should_match: true
+  - cleartext: "ldapsearch CN=Users"
+    process_name: ldapsearch
+    process_args: "ldapsearch -x -b CN=Users,DC=domain,DC=local"
+    should_match: true
+  - cleartext: "normal ldapsearch for groups"
+    process_name: ldapsearch
+    process_args: "ldapsearch -x -b dc=example,dc=com (cn=mygroup)"
+    should_match: false

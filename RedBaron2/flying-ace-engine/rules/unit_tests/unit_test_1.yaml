@@ -1,0 +1,14 @@
+# rules/unit_test_1.yaml
+name: suspicious_process
+mode: alert
+overlap_allowed_with: [sigma_netcat_reverse_shell]
+eval: e.process_name == "nc"
+tests:
+  - cleartext: "nc 10.0.0.1 4444"
+    process_name: nc
+    process_args: "nc 10.0.0.1 4444"
+    should_match: true
+  - cleartext: "ls -la"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

@@ -1,0 +1,49 @@
+name: elastic_kubectl_api_direct_request
+mode: alert
+overlap_allowed_with: [curl_wget_download, sigma_curl_usage]
+eval: |
+  (
+    (
+      e.process_name == "curl" ||
+      e.process_name == "wget"
+    ) &&
+    (
+      e.process_args.contains("/api/v1/") ||
+      e.process_args.contains("/apis/") ||
+      e.process_args.contains(":6443") ||
+      e.process_args.contains(":8443") ||
+      e.process_args.contains(":443/api")
+    ) &&
+    (
+      e.process_args.contains("pods") ||
+      e.process_args.contains("secrets") ||
+      e.process_args.contains("serviceaccounts") ||
+      e.process_args.contains("configmaps") ||
+      e.process_args.contains("namespaces")
+    )
+  )
+tests:
+  - cleartext: "curl -k https://kubernetes.default.svc:443/api/v1/namespaces/default/pods"
+    process_name: curl
+    process_args: "curl -k https://kubernetes.default.svc:443/api/v1/namespaces/default/pods"
+    should_match: true
+  - cleartext: "curl -H Authorization: Bearer $TOKEN https://10.0.0.1:6443/api/v1/secrets"
+    process_name: curl
+    process_args: "curl -H Authorization: Bearer $TOKEN https://10.0.0.1:6443/api/v1/secrets"
+    should_match: true
+  - cleartext: "wget https://kubernetes:8443/apis/v1/serviceaccounts"
+    process_name: wget
+    process_args: "wget https://kubernetes:8443/apis/v1/serviceaccounts"
+    should_match: true
+  - cleartext: "curl https://apiserver:443/api/v1/namespaces/kube-system/configmaps"
+    process_name: curl
+    process_args: "curl https://apiserver:443/api/v1/namespaces/kube-system/configmaps"
+    should_match: true
+  - cleartext: "curl https://example.com/api/v1/users"
+    process_name: curl
+    process_args: "curl https://example.com/api/v1/users"
+    should_match: false
+  - cleartext: "wget https://github.com/kubernetes/kubernetes/releases"
+    process_name: wget
+    process_args: "wget https://github.com/kubernetes/kubernetes/releases"
+    should_match: false

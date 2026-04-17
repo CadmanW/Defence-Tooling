@@ -1,0 +1,15 @@
+name: sigma_omigod_scx_runasprovider_executeshellcommand
+mode: alert
+eval: |
+  (
+    e.user_name == "root" && false /* LogonId not available in Rhai API */ && e.process_working_directory == "/var/opt/microsoft/scx/tmp" && e.process_args.contains("/bin/sh")
+  )
+tests:
+  - cleartext: "scx ExecuteShellCommand - will never match due to false in eval"
+    process_name: sh
+    process_args: "/bin/sh"
+    should_match: false
+  - cleartext: "normal sh"
+    process_name: sh
+    process_args: "sh script.sh"
+    should_match: false

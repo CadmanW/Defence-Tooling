@@ -1,0 +1,20 @@
+name: rta_passwd_change
+mode: alert
+eval: |
+  (
+    e.process_name == "passwd" &&
+    !re_match(e.process_args, "^passwd\\s*$")
+  )
+tests:
+  - cleartext: "passwd change for testuser"
+    process_name: passwd
+    process_args: "passwd testuser1"
+    should_match: true
+  - cleartext: "passwd with password in args"
+    process_name: passwd
+    process_args: "passwd testuser1 newpwd123"
+    should_match: true
+  - cleartext: "root changing own password (benign)"
+    process_name: passwd
+    process_args: "passwd"
+    should_match: false

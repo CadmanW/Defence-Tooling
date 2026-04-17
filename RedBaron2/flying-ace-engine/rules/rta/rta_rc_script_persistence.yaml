@@ -1,0 +1,16 @@
+name: rta_rc_script_persistence
+mode: alert
+eval: |
+  (
+    (e.process_name == "tee" || e.process_name == "echo") &&
+    re_match(e.process_args, "(rc\\.common|rc\\.local|/etc/init\\.d/|/etc/rc\\d)")
+  )
+tests:
+  - cleartext: "tee base64 python payload to rc.common"
+    process_name: tee
+    process_args: "tee /etc/rc.common"
+    should_match: true
+  - cleartext: "echo to /etc/rc.local"
+    process_name: echo
+    process_args: "echo test >> /etc/rc.local"
+    should_match: true

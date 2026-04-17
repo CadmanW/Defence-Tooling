@@ -1,0 +1,34 @@
+name: rta_shred_log_files
+mode: alert
+overlap_allowed_with: [sigma_clear_logs, sigma_file_deletion, sigma_susp_history_delete, histfile_removal]
+eval: |
+  (
+    e.process_name == "shred" &&
+    (
+      e.process_args.contains("/var/log/") ||
+      e.process_args.contains("/var/audit/") ||
+      re_match(e.process_args, "\\.bash_history") ||
+      re_match(e.process_args, "\\.zsh_history")
+    )
+  )
+tests:
+  - cleartext: "shred auth.log"
+    process_name: shred
+    process_args: "shred -u /var/log/auth.log"
+    should_match: true
+  - cleartext: "shred audit log"
+    process_name: shred
+    process_args: "shred -vfz -n 10 /var/audit/audit.log"
+    should_match: true
+  - cleartext: "shred bash history"
+    process_name: shred
+    process_args: "shred -u ~/.bash_history"
+    should_match: true
+  - cleartext: "shred zsh history"
+    process_name: shred
+    process_args: "shred /home/user/.zsh_history"
+    should_match: true
+  - cleartext: "normal shred of temp file"
+    process_name: shred
+    process_args: "shred -u /tmp/secret.txt"
+    should_match: false

@@ -1,0 +1,46 @@
+name: elastic_docker_socket_discovery
+mode: alert
+eval: |
+  (
+    (
+      e.process_args.contains("docker.sock") ||
+      (e.process_args.contains("/var/run") && e.process_args.contains("docker")) ||
+      (e.process_args.contains("/run") && e.process_args.contains("docker"))
+    ) &&
+    (
+      e.process_name == "find" ||
+      e.process_name == "ls" ||
+      e.process_name == "stat" ||
+      e.process_name == "test" ||
+      e.process_name == "curl"
+    )
+  )
+tests:
+  - cleartext: "find /var/run -name docker.sock"
+    process_name: find
+    process_args: "find /var/run -name docker.sock"
+    should_match: true
+  - cleartext: "ls -la /var/run/docker.sock"
+    process_name: ls
+    process_args: "ls -la /var/run/docker.sock"
+    should_match: true
+  - cleartext: "stat /run/docker.sock"
+    process_name: stat
+    process_args: "stat /run/docker.sock"
+    should_match: true
+  - cleartext: "curl --unix-socket /var/run/docker.sock http://localhost/containers/json"
+    process_name: curl
+    process_args: "curl --unix-socket /var/run/docker.sock http://localhost/containers/json"
+    should_match: true
+  - cleartext: "test -e /var/run/docker.sock"
+    process_name: test
+    process_args: "test -e /var/run/docker.sock"
+    should_match: true
+  - cleartext: "ls /var/run"
+    process_name: ls
+    process_args: "ls /var/run"
+    should_match: false
+  - cleartext: "find /tmp -name *.log"
+    process_name: find
+    process_args: "find /tmp -name *.log"
+    should_match: false

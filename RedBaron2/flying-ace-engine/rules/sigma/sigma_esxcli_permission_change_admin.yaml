@@ -1,0 +1,16 @@
+name: sigma_esxcli_permission_change_admin
+mode: alert
+eval: |
+  (
+    e.process_name == "esxcli" && e.process_args.contains("system") && (e.process_args.contains(" permission ") && e.process_args.contains(" set") && e.process_args.contains("Admin"))
+  )
+
+tests:
+  - cleartext: "esxcli permission change"
+    process_name: esxcli
+    process_args: "esxcli system permission set --role Admin"
+    should_match: true
+  - cleartext: "normal ls"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

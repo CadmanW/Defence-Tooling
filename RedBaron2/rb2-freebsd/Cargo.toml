@@ -1,0 +1,33 @@
+[package]
+name = "rb2-freebsd"
+version.workspace = true
+edition.workspace = true
+description = "Minimal FreeBSD rb2 agent with YARA scanning"
+readme = "../README.md"
+keywords = ["freebsd", "edr", "yara", "security"]
+categories = ["command-line-utilities", "os"]
+
+[dependencies]
+rb2-userspace = { path = "../rb2-userspace" }
+chrono.workspace = true
+flying-ace-engine.workspace = true
+lzma-rs.workspace = true
+bsm = { path = "../bsm" }
+rb2-ml = {path = "../rb2-ml"}
+serde_json.workspace = true
+anyhow.workspace = true
+fastrace.workspace = true
+libc.workspace = true
+log.workspace = true
+nix.workspace = true
+sysinfo.workspace = true
+tokio.workspace = true
+xxhash-rust.workspace = true
+yara-x.workspace = true
+
+[build-dependencies]
+lzma-rs.workspace = true
+
+[[bin]]
+name = "rb2"
+path = "src/main.rs"

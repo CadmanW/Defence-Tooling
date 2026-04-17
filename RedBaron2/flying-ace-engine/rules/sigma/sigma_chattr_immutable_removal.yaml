@@ -1,0 +1,16 @@
+name: sigma_chattr_immutable_removal
+mode: alert
+eval: |
+  (
+    e.process_name == "chattr" && e.process_args.contains(" -i ")
+  )
+
+tests:
+  - cleartext: "chattr execution"
+    process_name: chattr
+    process_args: "chattr  -i "
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

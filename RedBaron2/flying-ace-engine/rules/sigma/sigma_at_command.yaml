@@ -1,0 +1,16 @@
+name: sigma_at_command
+mode: alert
+eval: |
+  (
+    (e.process_name == "at" || e.process_name == "atd")
+  )
+
+tests:
+  - cleartext: "at execution"
+    process_name: at
+    process_args: "at"
+    should_match: true
+  - cleartext: "normal ls command"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

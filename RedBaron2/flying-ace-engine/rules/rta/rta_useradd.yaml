@@ -1,0 +1,21 @@
+name: rta_useradd
+mode: alert
+eval: |
+  (
+    e.process_name == "useradd" &&
+    !(e.process_pname == "dpkg" || e.process_pname == "apt")
+  )
+tests:
+  - cleartext: "useradd testuser"
+    process_name: useradd
+    process_args: "/usr/sbin/useradd testuser1"
+    should_match: true
+  - cleartext: "useradd with -m flag"
+    process_name: useradd
+    process_args: "useradd -m testuser"
+    should_match: true
+  - cleartext: "system useradd (from dpkg)"
+    process_name: useradd
+    process_args: "useradd _apt"
+    process_pname: dpkg
+    should_match: false

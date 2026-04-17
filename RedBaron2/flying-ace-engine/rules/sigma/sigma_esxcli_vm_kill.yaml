@@ -1,0 +1,16 @@
+name: sigma_esxcli_vm_kill
+mode: alert
+eval: |
+  (
+    e.process_name == "esxcli" && (e.process_args.contains("vm process") && e.process_args.contains("kill"))
+  )
+
+tests:
+  - cleartext: "esxcli vm kill"
+    process_name: esxcli
+    process_args: "esxcli vm process kill --type=force --world-id=12345"
+    should_match: true
+  - cleartext: "normal ls"
+    process_name: ls
+    process_args: "ls -la"
+    should_match: false

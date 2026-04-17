@@ -1,0 +1,36 @@
+name: elastic_gdb_process_injection
+mode: alert
+eval: |
+  (
+    e.process_name == "gdb" &&
+    (
+      e.process_args.contains("-p") ||
+      e.process_args.contains("--pid") ||
+      e.process_args.contains("attach")
+    )
+  )
+tests:
+  - cleartext: "gdb attach to process"
+    process_name: gdb
+    process_args: "gdb -p 1234"
+    should_match: true
+  - cleartext: "gdb attach with full flag"
+    process_name: gdb
+    process_args: "gdb --pid=5678"
+    should_match: true
+  - cleartext: "gdb attach command"
+    process_name: gdb
+    process_args: "gdb -ex attach 9999 /usr/bin/sshd"
+    should_match: true
+  - cleartext: "gdb batch mode attach"
+    process_name: gdb
+    process_args: "gdb -batch -p 1111 -ex 'call system(\"bash -i\")'"
+    should_match: true
+  - cleartext: "gdb normal debugging"
+    process_name: gdb
+    process_args: "gdb ./myprogram"
+    should_match: false
+  - cleartext: "gdb with core file"
+    process_name: gdb
+    process_args: "gdb /bin/ls core.12345"
+    should_match: false

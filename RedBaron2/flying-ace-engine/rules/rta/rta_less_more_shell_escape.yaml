@@ -1,0 +1,35 @@
+name: rta_less_more_shell_escape
+mode: alert
+eval: |
+  (
+    (e.process_name == "less" || e.process_name == "more" || e.process_name == "most") &&
+    (
+      re_match(e.process_args, "!/bin/(sh|bash)") ||
+      re_match(e.process_args, "!sh") ||
+      re_match(e.process_args, "!bash")
+    )
+  ) ||
+  (
+    (e.process_pname == "less" || e.process_pname == "more" || e.process_pname == "most") &&
+    (e.process_name == "sh" || e.process_name == "bash")
+  )
+tests:
+  - cleartext: "less shell escape"
+    process_name: sh
+    process_pname: less
+    process_args: "/bin/sh"
+    should_match: true
+  - cleartext: "more shell escape"
+    process_name: bash
+    process_pname: more
+    process_args: "/bin/bash"
+    should_match: true
+  - cleartext: "most shell escape"
+    process_name: sh
+    process_pname: most
+    process_args: "sh"
+    should_match: true
+  - cleartext: "normal less usage"
+    process_name: less
+    process_args: "less /var/log/syslog"
+    should_match: false

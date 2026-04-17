@@ -1,0 +1,25 @@
+name: sigma_security_tools_disabling
+mode: alert
+overlap_allowed_with: [sigma_services_stop_and_disable]
+eval: |
+  (
+    (e.process_name == "service" && (e.process_args.contains("iptables") && e.process_args.contains("stop"))) || (e.process_name == "service" && (e.process_args.contains("ip6tables") && e.process_args.contains("stop"))) || (e.process_name == "chkconfig" && (e.process_args.contains("iptables") && e.process_args.contains("stop"))) || (e.process_name == "chkconfig" && (e.process_args.contains("ip6tables") && e.process_args.contains("stop"))) || (e.process_name == "systemctl" && (e.process_args.contains("firewalld") && e.process_args.contains("stop"))) || (e.process_name == "systemctl" && (e.process_args.contains("firewalld") && e.process_args.contains("disable"))) || (e.process_name == "service" && (e.process_args.contains("cbdaemon") && e.process_args.contains("stop"))) || (e.process_name == "chkconfig" && (e.process_args.contains("cbdaemon") && e.process_args.contains("off"))) || (e.process_name == "systemctl" && (e.process_args.contains("cbdaemon") && e.process_args.contains("stop"))) || (e.process_name == "systemctl" && (e.process_args.contains("cbdaemon") && e.process_args.contains("disable"))) || (e.process_name == "setenforce" && e.process_args.contains("0")) || (e.process_name == "systemctl" && (e.process_args.contains("stop") && e.process_args.contains("falcon-sensor"))) /* truncated: 1 more selection(s) omitted to stay within Rhai complexity limit */
+  )
+
+tests:
+  - cleartext: "systemctl stop firewalld"
+    process_name: systemctl
+    process_args: "systemctl stop firewalld"
+    should_match: true
+  - cleartext: "service iptables stop"
+    process_name: service
+    process_args: "service iptables stop"
+    should_match: true
+  - cleartext: "setenforce 0"
+    process_name: setenforce
+    process_args: "setenforce 0"
+    should_match: true
+  - cleartext: "normal systemctl"
+    process_name: systemctl
+    process_args: "systemctl status nginx"
+    should_match: false
