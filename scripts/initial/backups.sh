@@ -7,7 +7,6 @@ if [ -z "$BCK" ]; then
     BCK="/root/.cache"
 fi
 
-BCK="$BCK/backups"
 mkdir -p "$BCK"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -132,6 +131,12 @@ backup_dir "/etc"  "etc"
 backup_dir "/home" "home"
 backup_dir "/opt"  "opt"
 backup_dir "/root" "root"
+
+# Binaries
+backup_dir "/bin"      "bin"
+backup_dir "/sbin"     "sbin"
+backup_dir "/usr/bin"  "usr_bin"
+backup_dir "/usr/sbin" "usr_sbin"
 
 # Web root(s) - detect and back up all that exist
 detect_webroot
